@@ -1,0 +1,29 @@
+{
+  "version": "aeonblight-economy-v0.1",
+  "maxLevel": 60,
+  "levelExp": {
+    "base": 50,
+    "linear": 25,
+    "quadratic": 8
+  },
+  "defaultTokenCooldownHours": 74,
+  "equipmentUidPrefix": "aeon",
+  "bagSlots": 25,
+  "warehouseSlots": 50,
+  "bagExpandSlots": 5,
+  "bagExpandMaxTimes": 10,
+  "bagExpandPriceToken": 50,
+  "bagExpandPaymentTimeoutSeconds": 600,
+  "tradingLicensePriceToken": 100,
+  "tradingLicensePaymentTimeoutSeconds": 600,
+  "equipmentDefaultMaxDurability": 100,
+  "equipmentRepairCostPerPointToken": 1,
+  "equipmentRepairMinCostToken": 1,
+  "equipmentRepairBurnBps": 1000,
+  "equipmentRepairRecycleBps": 8000,
+  "equipmentRepairRewardBps": 1000,
+  "equipmentDungeonWearPoints": 5,
+  "equipmentBossWearPoints": 8,
+  "nftMintFeeToken": 200,
+  "nftMintMinRarity": 3
+}

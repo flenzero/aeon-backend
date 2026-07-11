@@ -1,0 +1,137 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    env_file:
+      - path: ../local.env
+        required: false
+    environment:
+      POSTGRES_DB: "${POSTGRES_DB:-aeonblight_game}"
+      POSTGRES_USER: "${POSTGRES_USER:-aeonblight}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-aeonblight_dev_password}"
+    ports:
+      - "${POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../migrations/aeonblight_full_schema.sql:/docker-entrypoint-initdb.d/0001_aeonblight_full_schema.sql:ro
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-56379}:6379"
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+
+  account-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        SERVICE: account-api
+    env_file:
+      - path: ../local.env
+        required: false
+    environment:
+      ADDR: ":8081"
+      INTERNAL_KEY: "${INTERNAL_KEY:-dev-internal-key}"
+      JWT_SECRET: "${JWT_SECRET:-dev-jwt-secret}"
+      DATABASE_URL: "postgres://${POSTGRES_USER:-aeonblight}:${POSTGRES_PASSWORD:-aeonblight_dev_password}@postgres:5432/${POSTGRES_DB:-aeonblight_game}?sslmode=disable"
+      REDIS_ENABLED: "${REDIS_ENABLED:-true}"
+      REDIS_ADDR: "${REDIS_ADDR:-redis:6379}"
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
+      REDIS_DB: "${REDIS_DB:-0}"
+      SESSION_TTL_HOURS: "${SESSION_TTL_HOURS:-168}"
+      ONLINE_PRESENCE_TTL_SECONDS: "${ONLINE_PRESENCE_TTL_SECONDS:-90}"
+    ports:
+      - "8081:8081"
+    depends_on:
+      - postgres
+      - redis
+    restart: unless-stopped
+
+  economy-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        SERVICE: economy-api
+    env_file:
+      - path: ../local.env
+        required: false
+    environment:
+      ADDR: ":8082"
+      INTERNAL_KEY: "${INTERNAL_KEY:-dev-internal-key}"
+      JWT_SECRET: "${JWT_SECRET:-dev-jwt-secret}"
+      ECONOMY_CONFIG_DIR: "/app/configs/economy"
+      DATABASE_URL: "postgres://${POSTGRES_USER:-aeonblight}:${POSTGRES_PASSWORD:-aeonblight_dev_password}@postgres:5432/${POSTGRES_DB:-aeonblight_game}?sslmode=disable"
+      SOLANA_RPC_ENABLED: "${SOLANA_RPC_ENABLED:-false}"
+      SOLANA_RPC_URL: "${SOLANA_RPC_URL:-https://api.devnet.solana.com}"
+      SOLANA_NETWORK: "${SOLANA_NETWORK:-solana-devnet}"
+      SOLANA_TOKEN_MINT: "${SOLANA_TOKEN_MINT:-}"
+      SOLANA_TOKEN_DECIMALS: "${SOLANA_TOKEN_DECIMALS:-9}"
+      SOLANA_DEPOSIT_WALLET: "${SOLANA_DEPOSIT_WALLET:-}"
+      SOLANA_PAYOUT_WALLET: "${SOLANA_PAYOUT_WALLET:-}"
+      SOLANA_PAYOUT_PRIVATE_KEY: "${SOLANA_PAYOUT_PRIVATE_KEY:-}"
+      SOLANA_PAYOUT_MODE: "${SOLANA_PAYOUT_MODE:-stub}"
+      SOLANA_DEPOSIT_SCAN_LIMIT: "${SOLANA_DEPOSIT_SCAN_LIMIT:-50}"
+      SOLANA_PAYOUT_LOW_BALANCE_RAW: "${SOLANA_PAYOUT_LOW_BALANCE_RAW:-0}"
+    ports:
+      - "8082:8082"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  admin-api:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        SERVICE: admin-api
+    env_file:
+      - path: ../local.env
+        required: false
+    environment:
+      ADDR: ":8083"
+      ADMIN_TOKEN: "${ADMIN_TOKEN:-dev-admin-token}"
+      DATABASE_URL: "postgres://${POSTGRES_USER:-aeonblight}:${POSTGRES_PASSWORD:-aeonblight_dev_password}@postgres:5432/${POSTGRES_DB:-aeonblight_game}?sslmode=disable"
+    ports:
+      - "8083:8083"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+  economy-worker:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        SERVICE: economy-worker
+    env_file:
+      - path: ../local.env
+        required: false
+    environment:
+      ECONOMY_API_URL: "http://economy-api:8082"
+      INTERNAL_KEY: "${INTERNAL_KEY:-dev-internal-key}"
+      WORKER_INTERVAL_SECONDS: "${WORKER_INTERVAL_SECONDS:-15}"
+      DATABASE_URL: "postgres://${POSTGRES_USER:-aeonblight}:${POSTGRES_PASSWORD:-aeonblight_dev_password}@postgres:5432/${POSTGRES_DB:-aeonblight_game}?sslmode=disable"
+      SOLANA_RPC_ENABLED: "${SOLANA_RPC_ENABLED:-false}"
+      SOLANA_RPC_URL: "${SOLANA_RPC_URL:-https://api.devnet.solana.com}"
+      SOLANA_NETWORK: "${SOLANA_NETWORK:-solana-devnet}"
+      SOLANA_TOKEN_MINT: "${SOLANA_TOKEN_MINT:-}"
+      SOLANA_TOKEN_DECIMALS: "${SOLANA_TOKEN_DECIMALS:-9}"
+      SOLANA_DEPOSIT_WALLET: "${SOLANA_DEPOSIT_WALLET:-}"
+      SOLANA_PAYOUT_WALLET: "${SOLANA_PAYOUT_WALLET:-}"
+      SOLANA_PAYOUT_PRIVATE_KEY: "${SOLANA_PAYOUT_PRIVATE_KEY:-}"
+      SOLANA_PAYOUT_MODE: "${SOLANA_PAYOUT_MODE:-stub}"
+      SOLANA_DEPOSIT_SCAN_LIMIT: "${SOLANA_DEPOSIT_SCAN_LIMIT:-50}"
+      SOLANA_PAYOUT_LOW_BALANCE_RAW: "${SOLANA_PAYOUT_LOW_BALANCE_RAW:-0}"
+    depends_on:
+      - postgres
+      - economy-api
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:

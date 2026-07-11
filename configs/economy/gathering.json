@@ -1,0 +1,18 @@
+{
+  "gatheringNodes": [
+    {
+      "nodeId": "shadow_woods_iron_vein",
+      "nodeType": "mining",
+      "lootPoolId": "gather_shadow_woods",
+      "staminaCost": 1,
+      "respawnSeconds": 300
+    },
+    {
+      "nodeId": "shadow_woods_gloomcap_patch",
+      "nodeType": "foraging",
+      "lootPoolId": "gather_shadow_woods",
+      "staminaCost": 1,
+      "respawnSeconds": 180
+    }
+  ]
+}

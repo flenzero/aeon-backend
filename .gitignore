@@ -1,0 +1,16 @@
+# Local secrets / overrides — copy from local.env.example
+local.env
+.env
+.env.*
+!.env.example
+
+# Go / IDE
+bin/
+dist/
+work/
+*.exe
+*.test
+.DS_Store
+.idea/
+.vscode/
+*.swp

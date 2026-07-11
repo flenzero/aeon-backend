@@ -1,0 +1,180 @@
+{
+  "lootPools": [
+    {
+      "lootPoolId": "dungeon_ch0_floor1",
+      "entries": [
+        {
+          "rewardType": "item",
+          "itemId": "shadow_iron",
+          "quantityMin": 1,
+          "quantityMax": 2,
+          "dropChance": 0.75
+        },
+        {
+          "rewardType": "item",
+          "itemId": "gloomcap_spore",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.2
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "rusted_saber",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.08,
+          "rarity": 1,
+          "affixPoolId": "early_weapon_affixes"
+        }
+      ]
+    },
+    {
+      "lootPoolId": "dungeon_ch0_boss",
+      "entries": [
+        {
+          "rewardType": "item",
+          "itemId": "aeon_shard",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.45
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "nightglass_staff",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.12,
+          "rarity": 3,
+          "affixPoolId": "early_weapon_affixes"
+        },
+        {
+          "rewardType": "token",
+          "itemId": "GAME",
+          "quantityMin": 1,
+          "quantityMax": 3,
+          "dropChance": 0.1
+        }
+      ]
+    },
+    {
+      "lootPoolId": "gather_shadow_woods",
+      "entries": [
+        {
+          "rewardType": "item",
+          "itemId": "shadow_iron",
+          "quantityMin": 1,
+          "quantityMax": 3,
+          "dropChance": 0.9
+        },
+        {
+          "rewardType": "item",
+          "itemId": "aeon_shard",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.03
+        },
+        {
+          "rewardType": "token",
+          "itemId": "GAME",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.02
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "rusted_saber",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.01,
+          "rarity": 1,
+          "affixPoolId": "gathering_tool_affixes"
+        }
+      ]
+    },
+    {
+      "lootPoolId": "farm_emberroot_harvest",
+      "entries": [
+        {
+          "rewardType": "item",
+          "itemId": "emberroot",
+          "quantityMin": 2,
+          "quantityMax": 5,
+          "dropChance": 1
+        },
+        {
+          "rewardType": "item",
+          "itemId": "aeon_shard",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.01
+        }
+      ]
+    },
+    {
+      "lootPoolId": "boss_participation_base",
+      "entries": [
+        {
+          "rewardType": "item",
+          "itemId": "gloomcap_spore",
+          "quantityMin": 1,
+          "quantityMax": 2,
+          "dropChance": 1
+        }
+      ]
+    },
+    {
+      "lootPoolId": "boss_shadow_leviathan_main",
+      "entries": [
+        {
+          "rewardType": "item",
+          "itemId": "aeon_shard",
+          "quantityMin": 1,
+          "quantityMax": 2,
+          "dropChance": 0.65
+        },
+        {
+          "rewardType": "token",
+          "itemId": "GAME",
+          "quantityMin": 1,
+          "quantityMax": 2,
+          "dropChance": 0.2
+        }
+      ]
+    },
+    {
+      "lootPoolId": "boss_tier_silver",
+      "entries": [
+        {
+          "rewardType": "equipment",
+          "itemId": "nightglass_staff",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.15,
+          "rarity": 2,
+          "affixPoolId": "early_weapon_affixes"
+        }
+      ]
+    },
+    {
+      "lootPoolId": "boss_tier_gold",
+      "entries": [
+        {
+          "rewardType": "equipment",
+          "itemId": "nightglass_staff",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.35,
+          "rarity": 3,
+          "affixPoolId": "early_weapon_affixes"
+        },
+        {
+          "rewardType": "token",
+          "itemId": "GAME",
+          "quantityMin": 2,
+          "quantityMax": 4,
+          "dropChance": 0.25
+        }
+      ]
+    }
+  ]
+}

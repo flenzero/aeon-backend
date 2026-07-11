@@ -1,0 +1,40 @@
+{
+  "chapters": [
+    {
+      "chapterId": 0,
+      "name": "Ashen Threshold",
+      "floors": [
+        {
+          "floorId": 1,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 0,
+            "items": []
+          },
+          "maxExp": 30,
+          "lootPoolId": "dungeon_ch0_floor1"
+        },
+        {
+          "floorId": 2,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 0,
+            "items": []
+          },
+          "maxExp": 35,
+          "lootPoolId": "dungeon_ch0_floor1"
+        },
+        {
+          "floorId": 10,
+          "isBoss": true,
+          "enterCost": {
+            "gold": 0,
+            "items": []
+          },
+          "maxExp": 120,
+          "lootPoolId": "dungeon_ch0_boss"
+        }
+      ]
+    }
+  ]
+}

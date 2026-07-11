@@ -1,0 +1,78 @@
+{
+  "items": [
+    {
+      "itemId": "shadow_iron",
+      "displayName": "Shadow Iron",
+      "category": "material",
+      "rarity": 1,
+      "maxStack": 999,
+      "isEquipment": false
+    },
+    {
+      "itemId": "gloomcap_spore",
+      "displayName": "Gloomcap Spore",
+      "category": "material",
+      "rarity": 2,
+      "maxStack": 999,
+      "isEquipment": false
+    },
+    {
+      "itemId": "aeon_shard",
+      "displayName": "Aeon Shard",
+      "category": "rare_material",
+      "rarity": 4,
+      "maxStack": 99,
+      "isEquipment": false,
+      "tradable": true,
+      "defaultBindType": "UNBOUND"
+    },
+    {
+      "itemId": "market_stall_permit",
+      "displayName": "Market Stall Permit",
+      "category": "consumable",
+      "rarity": 3,
+      "maxStack": 99,
+      "isEquipment": false,
+      "tradable": false,
+      "defaultBindType": "BOUND"
+    },
+    {
+      "itemId": "rusted_saber",
+      "displayName": "Rusted Saber",
+      "category": "weapon",
+      "rarity": 1,
+      "maxStack": 1,
+      "isEquipment": true,
+      "equipSlot": 1,
+      "tradable": true,
+      "defaultBindType": "UNBOUND"
+    },
+    {
+      "itemId": "nightglass_staff",
+      "displayName": "Nightglass Staff",
+      "category": "weapon",
+      "rarity": 3,
+      "maxStack": 1,
+      "isEquipment": true,
+      "equipSlot": 1,
+      "tradable": true,
+      "defaultBindType": "UNBOUND"
+    },
+    {
+      "itemId": "emberroot_seed",
+      "displayName": "Emberroot Seed",
+      "category": "seed",
+      "rarity": 1,
+      "maxStack": 999,
+      "isEquipment": false
+    },
+    {
+      "itemId": "emberroot",
+      "displayName": "Emberroot",
+      "category": "crop",
+      "rarity": 1,
+      "maxStack": 999,
+      "isEquipment": false
+    }
+  ]
+}

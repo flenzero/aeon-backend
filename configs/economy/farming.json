@@ -1,0 +1,10 @@
+{
+  "crops": [
+    {
+      "cropId": "emberroot",
+      "seedItemId": "emberroot_seed",
+      "growthSeconds": 3600,
+      "harvestLootPoolId": "farm_emberroot_harvest"
+    }
+  ]
+}

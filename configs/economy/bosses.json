@@ -1,0 +1,20 @@
+{
+  "bosses": [
+    {
+      "bossId": "shadow_leviathan",
+      "displayName": "Shadow Leviathan",
+      "participationLootPoolId": "boss_participation_base",
+      "lootPoolId": "boss_shadow_leviathan_main",
+      "contributionTiers": [
+        {
+          "minContribution": 1000,
+          "bonusLootPoolId": "boss_tier_silver"
+        },
+        {
+          "minContribution": 5000,
+          "bonusLootPoolId": "boss_tier_gold"
+        }
+      ]
+    }
+  ]
+}

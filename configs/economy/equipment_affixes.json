@@ -1,0 +1,57 @@
+{
+  "affixPools": [
+    {
+      "affixPoolId": "early_weapon_affixes",
+      "rolls": {
+        "min": 1,
+        "max": 2
+      },
+      "affixes": [
+        {
+          "affixId": "attack_flat",
+          "stat": "attack",
+          "min": 2,
+          "max": 6,
+          "weight": 60
+        },
+        {
+          "affixId": "crit_chance",
+          "stat": "critChance",
+          "min": 0.01,
+          "max": 0.03,
+          "weight": 25
+        },
+        {
+          "affixId": "attack_speed",
+          "stat": "attackSpeed",
+          "min": 0.02,
+          "max": 0.05,
+          "weight": 15
+        }
+      ]
+    },
+    {
+      "affixPoolId": "gathering_tool_affixes",
+      "rolls": {
+        "min": 1,
+        "max": 1
+      },
+      "affixes": [
+        {
+          "affixId": "gather_bonus",
+          "stat": "gatherYield",
+          "min": 0.02,
+          "max": 0.08,
+          "weight": 70
+        },
+        {
+          "affixId": "rare_find",
+          "stat": "rareFind",
+          "min": 0.01,
+          "max": 0.03,
+          "weight": 30
+        }
+      ]
+    }
+  ]
+}
