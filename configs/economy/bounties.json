@@ -1,0 +1,41 @@
+{
+  "slots": [
+    {"slotIndex": 1, "unlockType": "default"},
+    {"slotIndex": 2, "unlockType": "gold", "goldCost": 3000},
+    {"slotIndex": 3, "unlockType": "aeb", "aebPrice": 300},
+    {"slotIndex": 4, "unlockType": "aeb", "aebPrice": 600},
+    {"slotIndex": 5, "unlockType": "aeb", "aebPrice": 900}
+  ],
+  "refresh": {
+    "freeCooldownSeconds": 14400,
+    "goldCost": 300,
+    "premiumAebPrice": 30
+  },
+  "taskTemplates": [
+    {"templateId":"gather_ashwood_white","type":"gather","difficulty":"normal","itemId":"ashwood_white","quantityMin":120,"quantityMax":200,"rewardItemId":"bounty_badge_common","rewardQuantity":1,"weight":1},
+    {"templateId":"gather_gloomstone_green","type":"gather","difficulty":"normal","itemId":"gloomstone_green","quantityMin":70,"quantityMax":120,"rewardItemId":"bounty_badge_common","rewardQuantity":1,"weight":1},
+    {"templateId":"gather_shadow_iron_blue","type":"gather","difficulty":"normal","itemId":"shadow_iron_blue","quantityMin":25,"quantityMax":50,"rewardItemId":"bounty_badge_common","rewardQuantity":1,"weight":1},
+    {"templateId":"gather_gloomcap_purple","type":"gather","difficulty":"normal","itemId":"gloomcap_spore_purple","quantityMin":8,"quantityMax":15,"rewardItemId":"bounty_badge_common","rewardQuantity":1,"weight":1},
+    {"templateId":"combat_any","type":"combat","difficulty":"normal","quantityMin":40,"quantityMax":80,"rewardItemId":"bounty_badge_common","rewardQuantity":1,"weight":1},
+    {"templateId":"submit_blue_equipment","type":"submit_equipment","difficulty":"rare","quantityMin":1,"quantityMax":1,"minRarity":3,"rewardItemId":"bounty_badge_rare","rewardQuantity":1,"weight":1}
+  ],
+  "badgeLottery": {
+    "common": {
+      "costItemId":"bounty_badge_common",
+      "rewards":[
+        {"type":"gold","weight":60,"min":500,"max":2000},
+        {"type":"item","itemId":"boss_ticket_ashen_threshold","weight":30,"min":1,"max":1},
+        {"type":"locked_aeb","weight":10,"min":1,"max":3}
+      ]
+    },
+    "rare": {
+      "costItemId":"bounty_badge_rare",
+      "rewards":[
+        {"type":"gold","weight":45,"min":1000,"max":5000},
+        {"type":"item","itemId":"boss_ticket_gloomwood","weight":25,"min":1,"max":1},
+        {"type":"item","itemId":"boss_ticket_voidscar","weight":15,"min":1,"max":1},
+        {"type":"locked_aeb","weight":15,"min":3,"max":10}
+      ]
+    }
+  }
+}

@@ -1,9 +1,14 @@
 # Project Audit — 2026-07-11
 
+> Updated 2026-07-12: the Git baseline, explicit runtime profiles, aggregated
+> startup validation, `/ready`, independent migration command, AEB naming, and
+> NFT rarity/refund rules are now implemented. See
+> `implementation-progress-2026-07-12.md` for the current checkpoint.
+
 ## Outcome
 
 The repository is a broad, runnable backend implementation, not only a scaffold.
-The four modules build and start independently, 89 registered HTTP routes have
+The four modules build and start independently, 97 registered HTTP routes have
 contract coverage, and the existing PostgreSQL integration suite passes. It is
 not yet production-complete because the on-chain NFT mint implementation is
 absent and the no-database runtime branch advertises healthy processes while
@@ -41,24 +46,22 @@ but its scheduler still lives in `main.go` and has no direct unit-test surface.
 
 ## Git branch audit
 
-- The current directory is not a Git working tree; `.git` is absent.
-- `git ls-remote --heads --tags https://github.com/flenzero/aeon-backend.git`
-  returned no refs on 2026-07-11.
-- Therefore there are no local or remote branches to classify as usable or
-  unusable. The immediate issue is missing repository initialization/history,
-  not a broken branch.
+- Git is initialized on `main`, tracking `origin/main` at
+  `https://github.com/flenzero/aeon-backend.git`.
+- No additional local or remote feature branches existed at the last audit, so
+  there was no unavailable branch to repair or remove.
 
 ## Verified test baseline
 
 `./test/run.sh --full` passed on 2026-07-11:
 
 - all Go unit tests;
-- all 89 HTTP route registration/authentication contracts;
+- all 97 HTTP route registration/authentication contracts;
 - wallet-login → character → snapshot → admin lookup flow;
 - local Solana JSON-RPC contract transport;
 - backend NFT request → confirmation → asset-list lifecycle;
 - builds and real local startup for all four runtime modules;
-- 12 PostgreSQL integration groups, including Solana deposit/payment and NFT
+- 13 PostgreSQL integration groups, including Solana deposit/payment and NFT
   request/confirmation state.
 
 ## Deepening opportunities

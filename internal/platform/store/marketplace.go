@@ -240,7 +240,7 @@ type MarketplaceListFilter struct {
 func (s *PostgresStore) MarketplaceCreateListing(req MarketplaceListRequest) (MarketplaceListResult, error) {
 	rules := req.Rules.withDefaults()
 	req.AssetType = strings.ToUpper(strings.TrimSpace(req.AssetType))
-	return runIdempotentAction(s, "marketplace_list", req.OpID, req.AccountID, req.CharacterID, func(ctx context.Context, tx pgx.Tx) (MarketplaceListResult, error) {
+	return runIdempotentAction(s, "marketplace_list", req.OpID, req.AccountID, req.CharacterID, req, func(ctx context.Context, tx pgx.Tx) (MarketplaceListResult, error) {
 		if !rules.Enabled {
 			return MarketplaceListResult{}, errors.New("marketplace is disabled")
 		}
@@ -297,7 +297,7 @@ func (s *PostgresStore) MarketplaceCreateListing(req MarketplaceListRequest) (Ma
 
 func (s *PostgresStore) MarketplaceBuy(req MarketplaceBuyRequest) (MarketplaceBuyResult, error) {
 	rules := req.Rules.withDefaults()
-	return runIdempotentAction(s, "marketplace_buy", req.OpID, req.AccountID, req.CharacterID, func(ctx context.Context, tx pgx.Tx) (MarketplaceBuyResult, error) {
+	return runIdempotentAction(s, "marketplace_buy", req.OpID, req.AccountID, req.CharacterID, req, func(ctx context.Context, tx pgx.Tx) (MarketplaceBuyResult, error) {
 		if !rules.Enabled {
 			return MarketplaceBuyResult{}, errors.New("marketplace is disabled")
 		}
@@ -429,7 +429,7 @@ func (s *PostgresStore) MarketplaceBuy(req MarketplaceBuyRequest) (MarketplaceBu
 
 func (s *PostgresStore) MarketplaceCancel(req MarketplaceCancelRequest) (MarketplaceCancelResult, error) {
 	rules := req.Rules.withDefaults()
-	return runIdempotentAction(s, "marketplace_cancel", req.OpID, req.AccountID, 0, func(ctx context.Context, tx pgx.Tx) (MarketplaceCancelResult, error) {
+	return runIdempotentAction(s, "marketplace_cancel", req.OpID, req.AccountID, 0, req, func(ctx context.Context, tx pgx.Tx) (MarketplaceCancelResult, error) {
 		if !rules.Enabled {
 			return MarketplaceCancelResult{}, errors.New("marketplace is disabled")
 		}
@@ -488,7 +488,7 @@ func (s *PostgresStore) MarketplaceCancel(req MarketplaceCancelRequest) (Marketp
 
 func (s *PostgresStore) MarketplaceExpandMaterialSlots(req MarketplaceExpandSlotsRequest) (MarketplaceExpandResult, error) {
 	rules := req.Rules.withDefaults()
-	return runIdempotentAction(s, "marketplace_expand_material", req.OpID, req.AccountID, req.CharacterID, func(ctx context.Context, tx pgx.Tx) (MarketplaceExpandResult, error) {
+	return runIdempotentAction(s, "marketplace_expand_material", req.OpID, req.AccountID, req.CharacterID, req, func(ctx context.Context, tx pgx.Tx) (MarketplaceExpandResult, error) {
 		if !rules.Enabled {
 			return MarketplaceExpandResult{}, errors.New("marketplace is disabled")
 		}
@@ -528,7 +528,7 @@ func (s *PostgresStore) MarketplaceExpandMaterialSlots(req MarketplaceExpandSlot
 
 func (s *PostgresStore) MarketplaceExpandWalletSlots(req MarketplaceExpandWalletRequest) (MarketplaceExpandWalletResult, error) {
 	rules := req.Rules.withDefaults()
-	return runIdempotentAction(s, "marketplace_expand_wallet", req.OpID, req.AccountID, req.CharacterID, func(ctx context.Context, tx pgx.Tx) (MarketplaceExpandWalletResult, error) {
+	return runIdempotentAction(s, "marketplace_expand_wallet", req.OpID, req.AccountID, req.CharacterID, req, func(ctx context.Context, tx pgx.Tx) (MarketplaceExpandWalletResult, error) {
 		if !rules.Enabled {
 			return MarketplaceExpandWalletResult{}, errors.New("marketplace is disabled")
 		}
@@ -582,7 +582,7 @@ func (s *PostgresStore) MarketplaceExpandWalletSlots(req MarketplaceExpandWallet
 }
 
 func (s *PostgresStore) MarketplaceSubmitWalletExpandPayment(req MarketplaceSubmitPaymentRequest) (PaymentOrder, error) {
-	return runIdempotentAction(s, "payment_submit", req.OpID, req.AccountID, 0, func(ctx context.Context, tx pgx.Tx) (PaymentOrder, error) {
+	return runIdempotentAction(s, "payment_submit", req.OpID, req.AccountID, 0, req, func(ctx context.Context, tx pgx.Tx) (PaymentOrder, error) {
 		sig := strings.TrimSpace(req.TxSignature)
 		if sig == "" {
 			return PaymentOrder{}, errors.New("txSignature is required")

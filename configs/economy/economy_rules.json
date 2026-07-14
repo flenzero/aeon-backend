@@ -24,6 +24,10 @@
   "equipmentRepairRewardBps": 1000,
   "equipmentDungeonWearPoints": 5,
   "equipmentBossWearPoints": 8,
-  "nftMintFeeToken": 200,
+  "nftMintFeesTokenByRarity": {
+    "3": 500,
+    "4": 2000,
+    "5": 10000
+  },
   "nftMintMinRarity": 3
 }

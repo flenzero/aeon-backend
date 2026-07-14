@@ -12,7 +12,6 @@ services:
       - "${POSTGRES_PORT:-55432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-      - ../migrations/aeonblight_full_schema.sql:/docker-entrypoint-initdb.d/0001_aeonblight_full_schema.sql:ro
     restart: unless-stopped
 
   redis:
@@ -34,6 +33,11 @@ services:
       - path: ../local.env
         required: false
     environment:
+      APP_PROFILE: "${APP_PROFILE:-development}"
+      TEST_SCOPE: "${TEST_SCOPE:-contract}"
+      STUB_MODE: "${STUB_MODE:-enabled}"
+      ALLOW_REDIS_FALLBACK: "${ALLOW_REDIS_FALLBACK:-false}"
+      REQUIRED_SCHEMA_VERSION: "${REQUIRED_SCHEMA_VERSION:-20260714_admin_compensation_v1}"
       ADDR: ":8081"
       INTERNAL_KEY: "${INTERNAL_KEY:-dev-internal-key}"
       JWT_SECRET: "${JWT_SECRET:-dev-jwt-secret}"
@@ -61,6 +65,10 @@ services:
       - path: ../local.env
         required: false
     environment:
+      APP_PROFILE: "${APP_PROFILE:-development}"
+      TEST_SCOPE: "${TEST_SCOPE:-contract}"
+      STUB_MODE: "${STUB_MODE:-enabled}"
+      REQUIRED_SCHEMA_VERSION: "${REQUIRED_SCHEMA_VERSION:-20260714_admin_compensation_v1}"
       ADDR: ":8082"
       INTERNAL_KEY: "${INTERNAL_KEY:-dev-internal-key}"
       JWT_SECRET: "${JWT_SECRET:-dev-jwt-secret}"
@@ -93,8 +101,13 @@ services:
       - path: ../local.env
         required: false
     environment:
+      APP_PROFILE: "${APP_PROFILE:-development}"
+      TEST_SCOPE: "${TEST_SCOPE:-contract}"
+      STUB_MODE: "${STUB_MODE:-enabled}"
+      REQUIRED_SCHEMA_VERSION: "${REQUIRED_SCHEMA_VERSION:-20260714_admin_compensation_v1}"
       ADDR: ":8083"
       ADMIN_TOKEN: "${ADMIN_TOKEN:-dev-admin-token}"
+      SUPER_ADMIN_OPS_KEY: "${SUPER_ADMIN_OPS_KEY:-}"
       DATABASE_URL: "postgres://${POSTGRES_USER:-aeonblight}:${POSTGRES_PASSWORD:-aeonblight_dev_password}@postgres:5432/${POSTGRES_DB:-aeonblight_game}?sslmode=disable"
     ports:
       - "8083:8083"
@@ -112,23 +125,16 @@ services:
       - path: ../local.env
         required: false
     environment:
+      APP_PROFILE: "${APP_PROFILE:-development}"
+      TEST_SCOPE: "${TEST_SCOPE:-contract}"
+      STUB_MODE: "${STUB_MODE:-enabled}"
       ECONOMY_API_URL: "http://economy-api:8082"
       INTERNAL_KEY: "${INTERNAL_KEY:-dev-internal-key}"
+      SERVICE_ID: "${SERVICE_ID:-}"
+      SERVICE_PRIVATE_KEY: "${SERVICE_PRIVATE_KEY:-}"
+      SERVICE_AUTH_MAX_SKEW_SECONDS: "${SERVICE_AUTH_MAX_SKEW_SECONDS:-120}"
       WORKER_INTERVAL_SECONDS: "${WORKER_INTERVAL_SECONDS:-15}"
-      DATABASE_URL: "postgres://${POSTGRES_USER:-aeonblight}:${POSTGRES_PASSWORD:-aeonblight_dev_password}@postgres:5432/${POSTGRES_DB:-aeonblight_game}?sslmode=disable"
-      SOLANA_RPC_ENABLED: "${SOLANA_RPC_ENABLED:-false}"
-      SOLANA_RPC_URL: "${SOLANA_RPC_URL:-https://api.devnet.solana.com}"
-      SOLANA_NETWORK: "${SOLANA_NETWORK:-solana-devnet}"
-      SOLANA_TOKEN_MINT: "${SOLANA_TOKEN_MINT:-}"
-      SOLANA_TOKEN_DECIMALS: "${SOLANA_TOKEN_DECIMALS:-9}"
-      SOLANA_DEPOSIT_WALLET: "${SOLANA_DEPOSIT_WALLET:-}"
-      SOLANA_PAYOUT_WALLET: "${SOLANA_PAYOUT_WALLET:-}"
-      SOLANA_PAYOUT_PRIVATE_KEY: "${SOLANA_PAYOUT_PRIVATE_KEY:-}"
-      SOLANA_PAYOUT_MODE: "${SOLANA_PAYOUT_MODE:-stub}"
-      SOLANA_DEPOSIT_SCAN_LIMIT: "${SOLANA_DEPOSIT_SCAN_LIMIT:-50}"
-      SOLANA_PAYOUT_LOW_BALANCE_RAW: "${SOLANA_PAYOUT_LOW_BALANCE_RAW:-0}"
     depends_on:
-      - postgres
       - economy-api
     restart: unless-stopped
 

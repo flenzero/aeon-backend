@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -42,6 +43,18 @@ func NewPostgres(ctx context.Context, databaseURL string) (*PostgresStore, error
 
 func (s *PostgresStore) Close() {
 	s.pool.Close()
+}
+
+func (s *PostgresStore) Ping(ctx context.Context) error {
+	return s.pool.Ping(ctx)
+}
+
+func (s *PostgresStore) HasSchemaVersion(ctx context.Context, version string) (bool, error) {
+	var exists bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT EXISTS (SELECT 1 FROM schema_migrations WHERE version = $1)
+	`, strings.TrimSpace(version)).Scan(&exists)
+	return exists, err
 }
 
 func (s *PostgresStore) SaveWalletNonce(row WalletLoginNonce) {
@@ -431,7 +444,7 @@ func (s *PostgresStore) DungeonEnter(req DungeonEnterRequest) (DungeonResult, er
 	if req.FloorID < 0 {
 		return DungeonResult{}, errors.New("floorId is invalid")
 	}
-	return runIdempotentAction(s, "dungeon_enter", req.OpID, req.AccountID, req.CharacterID, func(ctx context.Context, tx pgx.Tx) (DungeonResult, error) {
+	return runIdempotentAction(s, "dungeon_enter", req.OpID, req.AccountID, req.CharacterID, req, func(ctx context.Context, tx pgx.Tx) (DungeonResult, error) {
 		if err := s.lockCharacter(ctx, tx, req.AccountID, req.CharacterID); err != nil {
 			return DungeonResult{}, err
 		}
@@ -458,11 +471,15 @@ func (s *PostgresStore) DungeonEnter(req DungeonEnterRequest) (DungeonResult, er
 		}
 		var dungeonRunID string
 		err = tx.QueryRow(ctx, `
-			INSERT INTO dungeon_runs (account_id, character_id, dungeon_key, status, enter_cost)
-			VALUES ($1, $2, $3, 'STARTED', $4)
+			INSERT INTO dungeon_runs (account_id, character_id, origin_server_id, dungeon_key, status, enter_cost)
+			VALUES ($1, $2, NULLIF($3, ''), $4, 'STARTED', $5)
 			RETURNING id::text
-		`, req.AccountID, req.CharacterID, dungeonKey(req.ChapterID, req.FloorID), costBytes).Scan(&dungeonRunID)
+		`, req.AccountID, req.CharacterID, strings.TrimSpace(req.ServerID), dungeonKey(req.ChapterID, req.FloorID), costBytes).Scan(&dungeonRunID)
 		if err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "uq_dungeon_runs_active_character" {
+				return DungeonResult{}, ErrForbidden
+			}
 			return DungeonResult{}, err
 		}
 		if err := s.insertEconomyLedger(ctx, tx, req.AccountID, req.CharacterID, "DUNGEON_ENTERED", dungeonRunID, 0, strings.TrimSpace(req.OpID)); err != nil {
@@ -489,6 +506,84 @@ func (s *PostgresStore) DungeonEnter(req DungeonEnterRequest) (DungeonResult, er
 	})
 }
 
+func (s *PostgresStore) ActiveDungeonRun(accountID, characterID int64) (DungeonRunRecovery, error) {
+	var row DungeonRunRecovery
+	var dungeonKeyValue string
+	err := s.pool.QueryRow(context.Background(), `
+		SELECT id::text, account_id, character_id, COALESCE(origin_server_id, ''), dungeon_key, started_at
+		FROM dungeon_runs
+		WHERE account_id = $1 AND character_id = $2 AND status = 'STARTED'
+		ORDER BY started_at DESC
+		LIMIT 1
+	`, accountID, characterID).Scan(
+		&row.DungeonRunID, &row.AccountID, &row.CharacterID, &row.ServerID, &dungeonKeyValue, &row.StartedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return DungeonRunRecovery{}, ErrNotFound
+	}
+	if err != nil {
+		return DungeonRunRecovery{}, err
+	}
+	if _, err := fmt.Sscanf(dungeonKeyValue, "chapter:%d:floor:%d", &row.ChapterID, &row.FloorID); err != nil {
+		return DungeonRunRecovery{}, fmt.Errorf("invalid stored dungeon key %q: %w", dungeonKeyValue, err)
+	}
+	row.Required = true
+	return row, nil
+}
+
+func (s *PostgresStore) CancelDungeonRun(accountID, characterID int64, dungeonRunID, reason string) (DungeonRunRecovery, error) {
+	ctx := context.Background()
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
+	if err != nil {
+		return DungeonRunRecovery{}, err
+	}
+	defer rollback(ctx, tx)
+	var row DungeonRunRecovery
+	var dungeonKeyValue string
+	err = tx.QueryRow(ctx, `
+		SELECT id::text, account_id, character_id, COALESCE(origin_server_id, ''), dungeon_key, status, started_at
+		FROM dungeon_runs
+		WHERE id = $1 AND account_id = $2 AND character_id = $3
+		FOR UPDATE
+	`, strings.TrimSpace(dungeonRunID), accountID, characterID).Scan(
+		&row.DungeonRunID, &row.AccountID, &row.CharacterID, &row.ServerID, &dungeonKeyValue, &row.Status, &row.StartedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return DungeonRunRecovery{}, ErrNotFound
+	}
+	if err != nil {
+		return DungeonRunRecovery{}, err
+	}
+	if row.Status != "STARTED" && row.Status != "CANCELLED" {
+		return DungeonRunRecovery{}, ErrForbidden
+	}
+	if row.Status == "STARTED" {
+		result, err := json.Marshal(map[string]any{"result": "abandoned", "reason": strings.TrimSpace(reason)})
+		if err != nil {
+			return DungeonRunRecovery{}, err
+		}
+		if _, err := tx.Exec(ctx, `UPDATE dungeon_runs SET status='CANCELLED', result=$2, finished_at=NOW() WHERE id=$1`, row.DungeonRunID, result); err != nil {
+			return DungeonRunRecovery{}, err
+		}
+		row.Status = "CANCELLED"
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE game_tickets
+		SET status='CANCELLED'
+		WHERE account_id=$1 AND character_id=$2 AND status='ACTIVE'
+	`, accountID, characterID); err != nil {
+		return DungeonRunRecovery{}, err
+	}
+	if _, err := fmt.Sscanf(dungeonKeyValue, "chapter:%d:floor:%d", &row.ChapterID, &row.FloorID); err != nil {
+		return DungeonRunRecovery{}, fmt.Errorf("invalid stored dungeon key %q: %w", dungeonKeyValue, err)
+	}
+	row.Required = false
+	if err := tx.Commit(ctx); err != nil {
+		return DungeonRunRecovery{}, err
+	}
+	return row, nil
+}
+
 func (s *PostgresStore) DungeonFinish(req DungeonFinishRequest) (DungeonResult, error) {
 	req.Result = strings.ToLower(strings.TrimSpace(req.Result))
 	if strings.TrimSpace(req.DungeonRunID) == "" {
@@ -508,21 +603,22 @@ func (s *PostgresStore) DungeonFinish(req DungeonFinishRequest) (DungeonResult, 
 	default:
 		return DungeonResult{}, errors.New("result must be victory, defeat or timeout")
 	}
-	return runIdempotentAction(s, "dungeon_finish", req.OpID, req.AccountID, req.CharacterID, func(ctx context.Context, tx pgx.Tx) (DungeonResult, error) {
+	return runIdempotentAction(s, "dungeon_finish", req.OpID, req.AccountID, req.CharacterID, req, func(ctx context.Context, tx pgx.Tx) (DungeonResult, error) {
 		if err := s.lockCharacter(ctx, tx, req.AccountID, req.CharacterID); err != nil {
 			return DungeonResult{}, err
 		}
 		var storedRunID string
 		var storedKey string
 		var storedStatus string
+		var storedServerID string
 		err := tx.QueryRow(ctx, `
-			SELECT id::text, dungeon_key, status
+			SELECT id::text, dungeon_key, status, COALESCE(origin_server_id, '')
 			FROM dungeon_runs
 			WHERE id = $1
 				AND account_id = $2
 				AND character_id = $3
 			FOR UPDATE
-		`, strings.TrimSpace(req.DungeonRunID), req.AccountID, req.CharacterID).Scan(&storedRunID, &storedKey, &storedStatus)
+		`, strings.TrimSpace(req.DungeonRunID), req.AccountID, req.CharacterID).Scan(&storedRunID, &storedKey, &storedStatus, &storedServerID)
 		if errors.Is(err, pgx.ErrNoRows) {
 			return DungeonResult{}, ErrNotFound
 		}
@@ -530,6 +626,9 @@ func (s *PostgresStore) DungeonFinish(req DungeonFinishRequest) (DungeonResult, 
 			return DungeonResult{}, err
 		}
 		if storedStatus != "STARTED" {
+			return DungeonResult{}, ErrForbidden
+		}
+		if storedServerID != "" && strings.TrimSpace(req.ServerID) != storedServerID {
 			return DungeonResult{}, ErrForbidden
 		}
 		if storedKey != dungeonKey(req.ChapterID, req.FloorID) {
@@ -562,6 +661,25 @@ func (s *PostgresStore) DungeonFinish(req DungeonFinishRequest) (DungeonResult, 
 		`, storedRunID, dbStatus, resultBytes)
 		if err != nil {
 			return DungeonResult{}, err
+		}
+		if req.Result == "victory" {
+			_, err = tx.Exec(ctx, `
+				UPDATE characters
+				SET highest_cleared_chapter = CASE
+						WHEN highest_cleared_chapter < $2 OR (highest_cleared_chapter = $2 AND highest_cleared_floor < $3) THEN $2
+						ELSE highest_cleared_chapter
+					END,
+					highest_cleared_floor = CASE
+						WHEN highest_cleared_chapter < $2 OR (highest_cleared_chapter = $2 AND highest_cleared_floor < $3) THEN $3
+						ELSE highest_cleared_floor
+					END,
+					dungeon_clear_count = dungeon_clear_count + 1,
+					last_dungeon_cleared_at = NOW(), updated_at = NOW()
+				WHERE id = $1 AND account_id = $4
+			`, req.CharacterID, req.ChapterID, req.FloorID, req.AccountID)
+			if err != nil {
+				return DungeonResult{}, err
+			}
 		}
 		if req.Exp > 0 {
 			_, err = tx.Exec(ctx, `
@@ -609,7 +727,7 @@ func (s *PostgresStore) DungeonFinish(req DungeonFinishRequest) (DungeonResult, 
 }
 
 func (s *PostgresStore) LootClaim(req LootActionRequest) (EconomySnapshot, error) {
-	return runIdempotentAction(s, "loot_claim", req.OpID, req.AccountID, req.CharacterID, func(ctx context.Context, tx pgx.Tx) (EconomySnapshot, error) {
+	return runIdempotentAction(s, "loot_claim", req.OpID, req.AccountID, req.CharacterID, req, func(ctx context.Context, tx pgx.Tx) (EconomySnapshot, error) {
 		if err := s.lockCharacter(ctx, tx, req.AccountID, req.CharacterID); err != nil {
 			return EconomySnapshot{}, err
 		}
@@ -625,7 +743,7 @@ func (s *PostgresStore) LootClaim(req LootActionRequest) (EconomySnapshot, error
 }
 
 func (s *PostgresStore) LootClaimAll(req LootActionRequest) (EconomySnapshot, error) {
-	return runIdempotentAction(s, "loot_claim_all", req.OpID, req.AccountID, req.CharacterID, func(ctx context.Context, tx pgx.Tx) (EconomySnapshot, error) {
+	return runIdempotentAction(s, "loot_claim_all", req.OpID, req.AccountID, req.CharacterID, req, func(ctx context.Context, tx pgx.Tx) (EconomySnapshot, error) {
 		if err := s.lockCharacter(ctx, tx, req.AccountID, req.CharacterID); err != nil {
 			return EconomySnapshot{}, err
 		}
@@ -666,7 +784,7 @@ func (s *PostgresStore) LootClaimAll(req LootActionRequest) (EconomySnapshot, er
 }
 
 func (s *PostgresStore) LootDiscard(req LootActionRequest) (EconomySnapshot, error) {
-	return runIdempotentAction(s, "loot_discard", req.OpID, req.AccountID, req.CharacterID, func(ctx context.Context, tx pgx.Tx) (EconomySnapshot, error) {
+	return runIdempotentAction(s, "loot_discard", req.OpID, req.AccountID, req.CharacterID, req, func(ctx context.Context, tx pgx.Tx) (EconomySnapshot, error) {
 		if err := s.lockCharacter(ctx, tx, req.AccountID, req.CharacterID); err != nil {
 			return EconomySnapshot{}, err
 		}
@@ -740,7 +858,7 @@ func (s *PostgresStore) BossContribute(req BossContributeRequest) (BossContribut
 	if req.BossEventID <= 0 {
 		return BossContributeResult{}, errors.New("bossEventId is required")
 	}
-	return runIdempotentAction(s, "boss_contribute", req.OpID, req.AccountID, req.CharacterID, func(ctx context.Context, tx pgx.Tx) (BossContributeResult, error) {
+	return runIdempotentAction(s, "boss_contribute", req.OpID, req.AccountID, req.CharacterID, req, func(ctx context.Context, tx pgx.Tx) (BossContributeResult, error) {
 		if err := s.lockCharacter(ctx, tx, req.AccountID, req.CharacterID); err != nil {
 			return BossContributeResult{}, err
 		}
@@ -802,7 +920,7 @@ func (s *PostgresStore) BossSettle(req BossSettleRequest) (BossSettleResult, err
 	if req.BossEventID <= 0 {
 		return BossSettleResult{}, errors.New("bossEventId is required")
 	}
-	return runIdempotentAction(s, "boss_settle", req.OpID, req.AccountID, req.CharacterID, func(ctx context.Context, tx pgx.Tx) (BossSettleResult, error) {
+	return runIdempotentAction(s, "boss_settle", req.OpID, req.AccountID, req.CharacterID, req, func(ctx context.Context, tx pgx.Tx) (BossSettleResult, error) {
 		if err := s.lockCharacter(ctx, tx, req.AccountID, req.CharacterID); err != nil {
 			return BossSettleResult{}, err
 		}
@@ -907,7 +1025,7 @@ func (s *PostgresStore) runActivitySettlement(scope string, req ActivitySettleme
 	if req.ActivityID == "" {
 		return ActivitySettlementResult{}, errors.New("activityId is required")
 	}
-	return runIdempotentAction(s, scope, req.OpID, req.AccountID, req.CharacterID, func(ctx context.Context, tx pgx.Tx) (ActivitySettlementResult, error) {
+	return runIdempotentAction(s, scope, req.OpID, req.AccountID, req.CharacterID, req, func(ctx context.Context, tx pgx.Tx) (ActivitySettlementResult, error) {
 		if err := s.lockCharacter(ctx, tx, req.AccountID, req.CharacterID); err != nil {
 			return ActivitySettlementResult{}, err
 		}
@@ -916,6 +1034,9 @@ func (s *PostgresStore) runActivitySettlement(scope string, req ActivitySettleme
 			return ActivitySettlementResult{}, err
 		}
 		if req.ActivityType == "gathering" {
+			if _, err := s.advanceGatheringBounties(ctx, tx, req.CharacterID, req.RewardPlan); err != nil {
+				return ActivitySettlementResult{}, err
+			}
 			rewardsBytes, err := json.Marshal(rewards)
 			if err != nil {
 				return ActivitySettlementResult{}, err
@@ -1456,7 +1577,7 @@ func (s *PostgresStore) economySnapshot(ctx context.Context, q postgresReader, a
 			AND n.source_asset_id = e.id
 			AND n.status IN ('MINT_REQUESTED', 'MINTED')
 		WHERE e.character_id = $1
-			AND e.location NOT IN ('CONSUMED', 'DELETED', 'BURNED', 'LISTED', 'MARKET_CLAIM_PENDING')
+			AND e.location NOT IN ('CONSUMED', 'DELETED', 'BURNED', 'LISTED', 'MARKET_CLAIM_PENDING', 'NPC_RECYCLED')
 		ORDER BY e.location, e.slot, e.equip_slot, e.id
 	`, characterID)
 	if err != nil {
@@ -1501,7 +1622,7 @@ func (s *PostgresStore) economySnapshot(ctx context.Context, q postgresReader, a
 }
 
 func (s *PostgresStore) runEconomyAction(scope string, req EconomyActionRequest, mutate func(context.Context, pgx.Tx) error) (EconomySnapshot, error) {
-	return runIdempotentAction(s, scope, req.OpID, req.AccountID, req.CharacterID, func(ctx context.Context, tx pgx.Tx) (EconomySnapshot, error) {
+	return runIdempotentAction(s, scope, req.OpID, req.AccountID, req.CharacterID, req, func(ctx context.Context, tx pgx.Tx) (EconomySnapshot, error) {
 		if err := mutate(ctx, tx); err != nil {
 			return EconomySnapshot{}, err
 		}
@@ -1509,29 +1630,45 @@ func (s *PostgresStore) runEconomyAction(scope string, req EconomyActionRequest,
 	})
 }
 
-func runIdempotentAction[T any](s *PostgresStore, scope, opID string, accountID, characterID int64, run func(context.Context, pgx.Tx) (T, error)) (T, error) {
+func runIdempotentAction[T any](s *PostgresStore, scope, opID string, accountID, characterID int64, request any, run func(context.Context, pgx.Tx) (T, error)) (T, error) {
 	var zero T
 	opID = strings.TrimSpace(opID)
 	if opID == "" {
 		return zero, errors.New("opId is required")
 	}
+	requestJSON, err := json.Marshal(request)
+	if err != nil {
+		return zero, fmt.Errorf("encode idempotent request: %w", err)
+	}
+	requestHash := fmt.Sprintf("%x", sha256.Sum256(requestJSON))
 	ctx := context.Background()
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return zero, err
 	}
 	defer rollback(ctx, tx)
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, opID); err != nil {
+		return zero, err
+	}
 
 	var existingScope string
+	var existingAccountID, existingCharacterID int64
+	var existingRequestHash string
 	var response []byte
 	err = tx.QueryRow(ctx, `
-		SELECT scope, response
+		SELECT scope, COALESCE(account_id, 0), COALESCE(character_id, 0), COALESCE(request_hash, ''), response
 		FROM idempotency_keys
 		WHERE op_id = $1
-	`, opID).Scan(&existingScope, &response)
+	`, opID).Scan(&existingScope, &existingAccountID, &existingCharacterID, &existingRequestHash, &response)
 	if err == nil {
 		if existingScope != scope {
 			return zero, errors.New("opId already used for another operation")
+		}
+		if existingAccountID != accountID || existingCharacterID != characterID {
+			return zero, errors.New("opId already belongs to another account or character")
+		}
+		if existingRequestHash != "" && existingRequestHash != requestHash {
+			return zero, errors.New("opId already used with different request parameters")
 		}
 		var result T
 		if err := json.Unmarshal(response, &result); err != nil {
@@ -1555,9 +1692,9 @@ func runIdempotentAction[T any](s *PostgresStore, scope, opID string, accountID,
 		return zero, err
 	}
 	_, err = tx.Exec(ctx, `
-		INSERT INTO idempotency_keys (op_id, scope, account_id, character_id, response)
-		VALUES ($1, $2, $3, $4, $5)
-	`, opID, scope, accountID, characterID, response)
+		INSERT INTO idempotency_keys (op_id, scope, account_id, character_id, request_hash, response)
+		VALUES ($1, $2, $3, $4, $5, $6)
+	`, opID, scope, accountID, characterID, requestHash, response)
 	if err != nil {
 		return zero, err
 	}
@@ -1881,6 +2018,9 @@ func (s *PostgresStore) SettleUnlocks(now time.Time, limit int) []LockedGame {
 }
 
 func (s *PostgresStore) CreateWithdrawal(accountID int64, amount int64, wallet string, manual bool) (Withdrawal, error) {
+	if amount <= 0 {
+		return Withdrawal{}, errors.New("amount must be positive")
+	}
 	ctx := context.Background()
 	if wallet == "" {
 		wallet = fmt.Sprintf("pending_wallet_for_account_%d", accountID)
@@ -1919,7 +2059,7 @@ func (s *PostgresStore) CreateWithdrawal(accountID int64, amount int64, wallet s
 	}
 	_, err = tx.Exec(ctx, `
 		INSERT INTO economy_ledger (account_id, kind, currency, amount, reason)
-		VALUES ($1, 'WITHDRAWAL_REQUESTED', 'GAME', $2, $3)
+		VALUES ($1, 'WITHDRAWAL_REQUESTED', 'AEB', $2, $3)
 	`, accountID, amount, status)
 	if err != nil {
 		return Withdrawal{}, err

@@ -7,7 +7,7 @@ ARG SERVICE
 RUN CGO_ENABLED=0 go build -o /out/app ./cmd/${SERVICE}
 
 FROM alpine:3.20
-RUN adduser -D -H appuser
+RUN apk add --no-cache ca-certificates && adduser -D -H appuser
 WORKDIR /app
 USER appuser
 COPY --from=build /out/app /app/app

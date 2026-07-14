@@ -1,0 +1,7 @@
+FROM scratch
+WORKDIR /app
+USER 65532:65532
+COPY ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY app /app/app
+COPY configs /app/configs
+ENTRYPOINT ["/app/app"]

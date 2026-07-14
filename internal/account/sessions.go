@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/flenzero/aeon-backend/internal/platform/redisx"
 	"github.com/flenzero/aeon-backend/internal/platform/security"
 	"github.com/flenzero/aeon-backend/internal/platform/store"
 )
@@ -18,12 +17,85 @@ const (
 	redisOnlinePrefix  = "aeon:online:acct:"
 	redisServerSetPref = "aeon:online:server:"
 	redisServerMeta    = "aeon:server:"
+	redisDungeonResume = "aeon:dungeon:resume:"
 )
 
 type cachedSession struct {
 	SessionID string `json:"sessionId"`
 	AccountID int64  `json:"accountId"`
 	Status    string `json:"status"`
+}
+
+func (s *Service) DungeonRecovery(accountID, characterID int64) (store.DungeonRunRecovery, error) {
+	if accountID <= 0 || characterID <= 0 {
+		return store.DungeonRunRecovery{}, errors.New("accountId and characterId are required")
+	}
+	ctx := context.Background()
+	key := redisDungeonResume + strconv.FormatInt(accountID, 10) + ":" + strconv.FormatInt(characterID, 10)
+	if s.redis != nil && s.redis.Enabled() {
+		// Redis is a homepage hint only. PostgreSQL must confirm the run is still
+		// STARTED so a stale cache can never resurrect a finished/cancelled run.
+		var cached store.DungeonRunRecovery
+		_ = s.redis.GetJSON(ctx, key, &cached)
+	}
+	row, err := s.store.ActiveDungeonRun(accountID, characterID)
+	if errors.Is(err, store.ErrNotFound) {
+		if s.redis != nil && s.redis.Enabled() {
+			_ = s.redis.Delete(ctx, key)
+		}
+		return store.DungeonRunRecovery{Required: false}, nil
+	}
+	if err != nil {
+		return store.DungeonRunRecovery{}, err
+	}
+	if s.redis != nil && s.redis.Enabled() {
+		_ = s.redis.SetJSON(ctx, key, row, 5*time.Minute)
+	}
+	return row, nil
+}
+
+func (s *Service) ResolveDungeonRecovery(accountID, characterID int64, dungeonRunID, action, sessionID string) (DungeonRecoveryDecision, error) {
+	action = strings.ToLower(strings.TrimSpace(action))
+	if action != "abandon" && action != "resume" {
+		return DungeonRecoveryDecision{}, errors.New("action must be abandon or resume")
+	}
+	if err := s.RequireActiveSession(sessionID, accountID); err != nil {
+		return DungeonRecoveryDecision{}, err
+	}
+	if action == "resume" {
+		row, err := s.store.ActiveDungeonRun(accountID, characterID)
+		if err != nil {
+			return DungeonRecoveryDecision{}, err
+		}
+		if row.DungeonRunID != strings.TrimSpace(dungeonRunID) {
+			return DungeonRecoveryDecision{}, store.ErrForbidden
+		}
+		if strings.TrimSpace(row.ServerID) == "" {
+			return DungeonRecoveryDecision{}, errors.New("dungeon origin server is unavailable")
+		}
+		ticket := security.RandomToken("ticket")
+		expiresAt := time.Now().UTC().Add(90 * time.Second)
+		s.store.SaveTicket(store.GameTicket{
+			Ticket: ticket, AccountID: accountID, CharacterID: characterID,
+			ServerID: row.ServerID, SessionID: strings.TrimSpace(sessionID), ExpiresAt: expiresAt,
+		})
+		return DungeonRecoveryDecision{
+			Action: "resume", Status: "RESUME_READY", DungeonRunID: row.DungeonRunID,
+			ServerID: row.ServerID, Ticket: ticket, ExpiresAt: expiresAt,
+		}, nil
+	}
+	row, err := s.store.CancelDungeonRun(accountID, characterID, strings.TrimSpace(dungeonRunID), "player declined reconnect")
+	if err != nil {
+		return DungeonRecoveryDecision{}, err
+	}
+	if s.redis != nil && s.redis.Enabled() {
+		key := redisDungeonResume + strconv.FormatInt(accountID, 10) + ":" + strconv.FormatInt(characterID, 10)
+		_ = s.redis.Delete(context.Background(), key)
+	}
+	_ = sessionID
+	return DungeonRecoveryDecision{
+		Action: "abandon", Status: row.Status, DungeonRunID: row.DungeonRunID, ServerID: row.ServerID,
+	}, nil
 }
 
 type cachedRefresh struct {
@@ -200,16 +272,9 @@ func (s *Service) RequireActiveSession(sessionID string, accountID int64) error 
 	ctx := context.Background()
 	if s.redis != nil && s.redis.Enabled() {
 		var cached cachedSession
-		if err := s.redis.GetJSON(ctx, redisSessionPrefix+sessionID, &cached); err == nil {
-			if cached.Status != "ACTIVE" || cached.AccountID != accountID {
-				return errors.New("session is not active")
-			}
-			_ = s.store.TouchAccountSession(sessionID, time.Now().UTC())
-			_ = s.redis.Expire(ctx, redisSessionPrefix+sessionID, s.sessionTTL())
-			return nil
-		} else if !errors.Is(err, redisx.ErrNotFound) {
-			// fall through to postgres on redis errors
-		}
+		// Redis is only a hot hint. PostgreSQL confirmation is required so admin
+		// revocation/logout cannot be bypassed by an ACTIVE cache entry.
+		_ = s.redis.GetJSON(ctx, redisSessionPrefix+sessionID, &cached)
 	}
 	session, err := s.store.GetAccountSession(sessionID)
 	if err != nil {

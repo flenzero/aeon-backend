@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"crypto/ed25519"
 	"errors"
 	"fmt"
 	"os"
@@ -341,6 +342,374 @@ func TestPostgresStoreIntegration(t *testing.T) {
 	`, duplicateSlotUID, account.ID, character.ID, itemID)
 	if !isUniqueViolation(err) {
 		t.Fatalf("duplicate equipment slot err = %v, want unique violation", err)
+	}
+}
+
+func TestPostgresBountyBoardAndPaymentFulfillment(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+	ctx := context.Background()
+	pg, err := NewPostgres(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("open postgres: %v", err)
+	}
+	defer pg.Close()
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	wallet := "bounty_wallet_" + suffix
+	defer func() { _, _ = pg.pool.Exec(ctx, `DELETE FROM accounts WHERE solana_wallet_address=$1`, wallet) }()
+	account := pg.UpsertAccountByWallet(wallet)
+	character, err := pg.CreateCharacter(account.ID, "BountyHero")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pg.pool.Exec(ctx, `UPDATE character_wallets SET gold=5000 WHERE character_id=$1`, character.ID); err != nil {
+		t.Fatal(err)
+	}
+	plans := map[int]BountyTaskPlan{}
+	for slot := 1; slot <= 5; slot++ {
+		plans[slot] = BountyTaskPlan{TemplateID: "gather", Type: "gather", Difficulty: "normal", ItemID: "ashwood_white", RequiredQuantity: 10, RewardItemID: "bounty_badge_common", RewardQuantity: 1}
+	}
+	board, err := pg.BountyBoard(BountyBoardRequest{AccountID: account.ID, CharacterID: character.ID, Plans: plans})
+	if err != nil || len(board.Slots) != 5 || board.Slots[0].Task == nil {
+		t.Fatalf("initial bounty board=%+v err=%v", board, err)
+	}
+	board, err = pg.UnlockBountyGoldSlot(BountyGoldUnlockRequest{OpID: "bounty-gold-" + suffix, AccountID: account.ID, CharacterID: character.ID, GoldCost: 3000, Plans: plans})
+	if err != nil || !board.Slots[1].Unlocked || board.Slots[1].Task == nil {
+		t.Fatalf("gold bounty unlock=%+v err=%v", board, err)
+	}
+	order, err := pg.CreateBountyPayment(BountyPaymentRequest{OpID: "bounty-aeb-" + suffix, AccountID: account.ID, CharacterID: character.ID, Purpose: PaymentPurposeBountySlotUnlock, SlotIndex: 3, Amount: 300, ReceiverWallet: "deposit-wallet"})
+	if err != nil {
+		t.Fatalf("create bounty payment: %v", err)
+	}
+	if _, err := pg.MarketplaceSubmitWalletExpandPayment(MarketplaceSubmitPaymentRequest{OpID: "bounty-submit-" + suffix, AccountID: account.ID, OrderID: order.Order.ID, TxSignature: "bounty-pay-" + suffix}); err != nil {
+		t.Fatalf("submit bounty payment: %v", err)
+	}
+	if _, err := pg.ConfirmPaymentOrder(ctx, order.Order.ID, "bounty test"); err != nil {
+		t.Fatalf("fulfill bounty payment: %v", err)
+	}
+	board, err = pg.BountyBoard(BountyBoardRequest{AccountID: account.ID, CharacterID: character.ID, Plans: plans})
+	if err != nil || !board.Slots[2].Unlocked || board.Slots[2].Task == nil {
+		t.Fatalf("fulfilled bounty board=%+v err=%v", board, err)
+	}
+}
+
+func TestPostgresWithdrawalCreatesOnlyOnePendingPayout(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+	ctx := context.Background()
+	pg, err := NewPostgres(ctx, databaseURL)
+	if err != nil {
+		t.Fatalf("open postgres: %v", err)
+	}
+	defer pg.Close()
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	wallet := "withdrawal_boundary_" + suffix
+	defer func() { _, _ = pg.pool.Exec(ctx, `DELETE FROM accounts WHERE solana_wallet_address = $1`, wallet) }()
+	account := pg.UpsertAccountByWallet(wallet)
+	if _, err := pg.GrantLocked(account.ID, 100, "test", "withdrawal-boundary-"+suffix, time.Now().UTC().Add(-time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	_ = pg.SettleUnlocks(time.Now().UTC(), 20)
+	withdrawal, err := pg.CreateWithdrawal(account.ID, 25, wallet, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := ChainScanConfig{PayoutMode: "record", TokenMint: "AEB"}
+	pg.ProcessAutoWithdrawalsWithChain(time.Now().UTC(), 5000, 20000, 30000, 150000, 20, cfg)
+	pg.ProcessAutoWithdrawalsWithChain(time.Now().UTC(), 5000, 20000, 30000, 150000, 20, cfg)
+	var count int
+	if err := pg.pool.QueryRow(ctx, `SELECT COUNT(*)::int FROM solana_payouts WHERE withdrawal_id = $1`, withdrawal.ID).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("payout count = %d, want 1", count)
+	}
+}
+
+func TestPostgresServiceIdentityLifecycleAndReplayProtection(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+	ctx := context.Background()
+	pg, err := NewPostgres(ctx, databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pg.Close()
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	serviceID := "game-server-test-" + suffix
+	subjectID := "test-" + suffix
+	publicKey, _, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		_, _ = pg.pool.Exec(ctx, `DELETE FROM admin_audit_logs WHERE target_type = 'service_identity' AND target_id = $1`, serviceID)
+		_, _ = pg.pool.Exec(ctx, `DELETE FROM service_identities WHERE service_id = $1`, serviceID)
+	}()
+	created, err := pg.CreateServiceIdentity(CreateServiceIdentityInput{
+		ServiceID: serviceID, Name: "Integration Game Server", Kind: "GAME_SERVER", SubjectID: subjectID,
+		PublicKey: chain.EncodeBase58(publicKey), Capabilities: []string{"account.gameplay", "economy.gameplay"},
+		CreatedBy: "bootstrap-super-admin", Reason: "integration test",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Status != ServiceIdentityActive || !created.HasCapability("economy.gameplay") {
+		t.Fatalf("created = %+v", created)
+	}
+	if err := pg.ConsumeServiceNonce(serviceID, "integration-nonce-0001", time.Now().UTC().Add(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	if err := pg.ConsumeServiceNonce(serviceID, "integration-nonce-0001", time.Now().UTC().Add(time.Minute)); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("replay err = %v, want ErrForbidden", err)
+	}
+	disabled, err := pg.DisableServiceIdentity(serviceID, "bootstrap-super-admin", "integration revoke")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if disabled.Status != ServiceIdentityDisabled || disabled.DisabledAt == nil {
+		t.Fatalf("disabled = %+v", disabled)
+	}
+	again, err := pg.DisableServiceIdentity(serviceID, "different-admin", "overwrite attempt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if again.DisabledBy != disabled.DisabledBy || again.DisableReason != disabled.DisableReason || !again.DisabledAt.Equal(*disabled.DisabledAt) {
+		t.Fatalf("repeated disable changed original revocation: first=%+v again=%+v", disabled, again)
+	}
+}
+
+func TestPostgresVerifiedPaymentReceiptCannotBeCreditedAgain(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+	ctx := context.Background()
+	pg, err := NewPostgres(ctx, databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pg.Close()
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	wallet := "verified_payer_" + suffix
+	depositOwner := "verified_deposit_" + suffix
+	mint := "verified_mint_" + suffix
+	signature := "verified_signature_" + suffix
+	cursor := "verified_cursor_" + suffix
+	defer func() {
+		_, _ = pg.pool.Exec(ctx, `DELETE FROM solana_deposits WHERE signature = $1`, signature)
+		_, _ = pg.pool.Exec(ctx, `DELETE FROM chain_cursors WHERE name = $1`, cursor)
+		_, _ = pg.pool.Exec(ctx, `DELETE FROM accounts WHERE solana_wallet_address = $1`, wallet)
+	}()
+	account := pg.UpsertAccountByWallet(wallet)
+	character, err := pg.CreateCharacter(account.ID, "VerifiedPayment")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rules := MarketplaceRules{Enabled: true, DepositReceiverWallet: depositOwner, WalletExpandPriceToken: 50}.withDefaults()
+	created, err := pg.MarketplaceExpandWalletSlots(MarketplaceExpandWalletRequest{
+		OpID: "verified-create-" + suffix, AccountID: account.ID, CharacterID: character.ID, Rules: rules,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rpc := &chain.MemoryRPC{
+		Slot:       200,
+		Signatures: map[string][]chain.SignatureInfo{depositOwner: {{Signature: signature, Slot: 190}}},
+		Txs: map[string]*chain.TransactionDetail{signature: {
+			Signature: signature, Slot: 190,
+			PreTokenBalances:  []chain.TokenBalance{{Owner: wallet, Mint: mint, Amount: 100}, {Owner: depositOwner, Mint: mint, Amount: 0}},
+			PostTokenBalances: []chain.TokenBalance{{Owner: wallet, Mint: mint, Amount: 50}, {Owner: depositOwner, Mint: mint, Amount: 50}},
+		}},
+	}
+	chainCfg := ChainScanConfig{Network: "solana-devnet", TokenMint: mint, TokenDecimals: 0, DepositWallet: depositOwner, CursorName: cursor, ScanLimit: 20}
+	fulfilled, err := pg.SubmitPaymentOrderVerified(ctx, rpc, chainCfg, MarketplaceSubmitPaymentRequest{
+		OpID: "verified-submit-" + suffix, AccountID: account.ID, OrderID: created.Order.ID, TxSignature: signature,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fulfilled.Status != "FULFILLED" {
+		t.Fatalf("fulfilled = %+v", fulfilled)
+	}
+	if _, err := pg.ScanAndCreditDeposits(ctx, rpc, chainCfg); err != nil {
+		t.Fatal(err)
+	}
+	if token := pg.Token(account.ID); token.ExternalBalance != 0 {
+		t.Fatalf("verified payment was credited again as deposit: %+v", token)
+	}
+}
+
+func TestPostgresDepositScanPaginatesBeyondLimit(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+	ctx := context.Background()
+	pg, err := NewPostgres(ctx, databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pg.Close()
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	wallet := "pagination_payer_" + suffix
+	depositOwner := "pagination_deposit_" + suffix
+	mint := "pagination_mint_" + suffix
+	cursor := "pagination_cursor_" + suffix
+	signatures := []string{"pagination_sig_3_" + suffix, "pagination_sig_2_" + suffix, "pagination_sig_1_" + suffix}
+	defer func() {
+		_, _ = pg.pool.Exec(ctx, `DELETE FROM solana_deposits WHERE signature = ANY($1)`, signatures)
+		_, _ = pg.pool.Exec(ctx, `DELETE FROM chain_cursors WHERE name = $1`, cursor)
+		_, _ = pg.pool.Exec(ctx, `DELETE FROM accounts WHERE solana_wallet_address = $1`, wallet)
+	}()
+	account := pg.UpsertAccountByWallet(wallet)
+	rpc := &chain.MemoryRPC{
+		Slot: 110,
+		Signatures: map[string][]chain.SignatureInfo{depositOwner: {
+			{Signature: signatures[0], Slot: 103}, {Signature: signatures[1], Slot: 102}, {Signature: signatures[2], Slot: 101},
+		}},
+		Txs: map[string]*chain.TransactionDetail{},
+	}
+	for i, signature := range signatures {
+		slot := uint64(103 - i)
+		rpc.Txs[signature] = &chain.TransactionDetail{
+			Signature: signature, Slot: slot,
+			PreTokenBalances:  []chain.TokenBalance{{Owner: wallet, Mint: mint, Amount: uint64(3 - i)}, {Owner: depositOwner, Mint: mint, Amount: uint64(i)}},
+			PostTokenBalances: []chain.TokenBalance{{Owner: wallet, Mint: mint, Amount: uint64(2 - i)}, {Owner: depositOwner, Mint: mint, Amount: uint64(i + 1)}},
+		}
+	}
+	result, err := pg.ScanAndCreditDeposits(ctx, rpc, ChainScanConfig{
+		Network: "solana-devnet", TokenMint: mint, TokenDecimals: 0, DepositWallet: depositOwner, CursorName: cursor, ScanLimit: 2,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Credited != 3 || pg.Token(account.ID).ExternalBalance != 3 {
+		t.Fatalf("result=%+v token=%+v", result, pg.Token(account.ID))
+	}
+}
+
+func TestPostgresIdempotencyKeyCannotCrossAccount(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+	ctx := context.Background()
+	pg, err := NewPostgres(ctx, databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pg.Close()
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	walletA, walletB := "idempotency_a_"+suffix, "idempotency_b_"+suffix
+	opID := "shared-op-" + suffix
+	defer func() {
+		_, _ = pg.pool.Exec(ctx, `DELETE FROM idempotency_keys WHERE op_id = $1`, opID)
+		_, _ = pg.pool.Exec(ctx, `DELETE FROM accounts WHERE solana_wallet_address IN ($1, $2)`, walletA, walletB)
+	}()
+	accountA, accountB := pg.UpsertAccountByWallet(walletA), pg.UpsertAccountByWallet(walletB)
+	characterA, err := pg.CreateCharacter(accountA.ID, "A")
+	if err != nil {
+		t.Fatal(err)
+	}
+	characterB, err := pg.CreateCharacter(accountB.ID, "B")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pg.DungeonEnter(DungeonEnterRequest{OpID: opID, AccountID: accountA.ID, CharacterID: characterA.ID, ChapterID: 0, FloorID: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if result, err := pg.DungeonEnter(DungeonEnterRequest{OpID: opID, AccountID: accountA.ID, CharacterID: characterA.ID, ChapterID: 0, FloorID: 2}); err == nil {
+		t.Fatalf("changed request reused cached idempotency response: %+v", result)
+	}
+	if result, err := pg.DungeonEnter(DungeonEnterRequest{OpID: opID, AccountID: accountB.ID, CharacterID: characterB.ID, ChapterID: 0, FloorID: 1}); err == nil {
+		t.Fatalf("cross-account opId replay accepted: %+v", result)
+	}
+}
+
+func TestPostgresDungeonRunIsBoundToOriginServer(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+	ctx := context.Background()
+	pg, err := NewPostgres(ctx, databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pg.Close()
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	accountRow := pg.UpsertAccountByWallet("origin_server_wallet_" + suffix)
+	character, err := pg.CreateCharacter(accountRow.ID, "Origin Server Hero")
+	if err != nil {
+		t.Fatal(err)
+	}
+	serverA, serverB := "origin-a-"+suffix, "origin-b-"+suffix
+	defer func() {
+		_, _ = pg.pool.Exec(ctx, `DELETE FROM accounts WHERE id=$1`, accountRow.ID)
+		_, _ = pg.pool.Exec(ctx, `DELETE FROM game_servers WHERE server_id IN ($1,$2)`, serverA, serverB)
+	}()
+	for _, serverID := range []string{serverA, serverB} {
+		if _, err := pg.UpsertGameServer(GameServer{ServerID: serverID, DisplayName: serverID, Host: "127.0.0.1", Port: 7001}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run, err := pg.DungeonEnter(DungeonEnterRequest{
+		OpID: "origin-enter-" + suffix, AccountID: accountRow.ID, CharacterID: character.ID,
+		ServerID: serverA, ChapterID: 0, FloorID: 1,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	recovery, err := pg.ActiveDungeonRun(accountRow.ID, character.ID)
+	if err != nil || !recovery.Required || recovery.ServerID != serverA || recovery.DungeonRunID != run.DungeonRunID {
+		t.Fatalf("recovery=%+v err=%v", recovery, err)
+	}
+	before, err := pg.EconomySnapshot(accountRow.ID, character.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pg.DungeonEnter(DungeonEnterRequest{
+		OpID: "origin-second-enter-" + suffix, AccountID: accountRow.ID, CharacterID: character.ID,
+		ServerID: serverB, ChapterID: 0, FloorID: 2,
+	}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("second active dungeon err=%v want ErrForbidden", err)
+	}
+	_, err = pg.DungeonFinish(DungeonFinishRequest{
+		OpID: "origin-wrong-finish-" + suffix, AccountID: accountRow.ID, CharacterID: character.ID,
+		DungeonRunID: run.DungeonRunID, ServerID: serverB, ChapterID: 0, FloorID: 1, Result: "victory",
+	})
+	if !errors.Is(err, ErrForbidden) {
+		t.Fatalf("wrong server finish err=%v want ErrForbidden", err)
+	}
+	resumeTicket := GameTicket{
+		Ticket: "resume-ticket-" + suffix, AccountID: accountRow.ID, CharacterID: character.ID,
+		ServerID: serverA, SessionID: "resume-session-" + suffix, ExpiresAt: time.Now().UTC().Add(time.Minute),
+	}
+	pg.SaveTicket(resumeTicket)
+	cancelled, err := pg.CancelDungeonRun(accountRow.ID, character.ID, run.DungeonRunID, "player declined reconnect")
+	if err != nil || cancelled.Status != "CANCELLED" {
+		t.Fatalf("cancelled=%+v err=%v", cancelled, err)
+	}
+	again, err := pg.CancelDungeonRun(accountRow.ID, character.ID, run.DungeonRunID, "duplicate request")
+	if err != nil || again.Status != "CANCELLED" {
+		t.Fatalf("repeated cancel=%+v err=%v", again, err)
+	}
+	if _, err := pg.ConsumeTicket(resumeTicket.Ticket, serverA, time.Now().UTC()); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("cancelled resume ticket err=%v want ErrForbidden", err)
+	}
+	after, err := pg.EconomySnapshot(accountRow.ID, character.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.Exp != after.Exp || before.AccountToken != after.AccountToken || len(before.LootTray) != len(after.LootTray) {
+		t.Fatalf("cancel changed rewards: before=%+v after=%+v", before, after)
 	}
 }
 
@@ -1250,6 +1619,9 @@ func TestPostgresBagExpandAndTradingLicense(t *testing.T) {
 	if bagOrder.Order.Purpose != PaymentPurposeBagExpand || bagOrder.Order.Amount != 50 {
 		t.Fatalf("bag order=%+v", bagOrder.Order)
 	}
+	if _, err := pg.ConfirmPaymentOrder(ctx, bagOrder.Order.ID, "unverified boundary"); err == nil {
+		t.Fatal("pending payment order was fulfilled without a submitted chain receipt")
+	}
 	submitted, err := pg.MarketplaceSubmitWalletExpandPayment(MarketplaceSubmitPaymentRequest{
 		OpID:        "bag_expand_submit_" + suffix,
 		AccountID:   account.ID,
@@ -1517,7 +1889,7 @@ func TestPostgresNFTMintRequestConfirm(t *testing.T) {
 	`, equipUID, account.ID, character.ID, itemID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := pg.GrantLocked(account.ID, 500, "test", "nft-fund-"+suffix, time.Now().UTC().Add(-time.Minute)); err != nil {
+	if _, err := pg.GrantLocked(account.ID, 2500, "test", "nft-fund-"+suffix, time.Now().UTC().Add(-time.Minute)); err != nil {
 		t.Fatal(err)
 	}
 	_ = pg.SettleUnlocks(time.Now().UTC(), 20)
@@ -1532,6 +1904,9 @@ func TestPostgresNFTMintRequestConfirm(t *testing.T) {
 	if requested.Request.Status != "PAID" || requested.Asset.Status != "MINT_REQUESTED" {
 		t.Fatalf("requested=%+v", requested)
 	}
+	if requested.Request.MintFeeToken != 2000 {
+		t.Fatalf("mint fee = %d, want 2000 AEB for rarity 4", requested.Request.MintFeeToken)
+	}
 	confirmed, err := pg.ConfirmNFTMint(NFTMintConfirmInput{
 		OpID: "nft_confirm_" + suffix, RequestID: requested.Request.ID,
 		MintAddress: "MintAddr" + suffix,
@@ -1545,6 +1920,79 @@ func TestPostgresNFTMintRequestConfirm(t *testing.T) {
 	assets, err := pg.ListNFTAssets(account.ID)
 	if err != nil || len(assets) != 1 || assets[0].Status != "MINTED" {
 		t.Fatalf("assets=%v err=%v", assets, err)
+	}
+}
+
+func TestPostgresNFTMintCancelRefundsOriginalAEBBalanceCategories(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+	ctx := context.Background()
+	pg, err := NewPostgres(ctx, databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pg.Close()
+
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	wallet := "nft_refund_wallet_" + suffix
+	itemID := "nft_refund_item_" + suffix
+	equipUID := "nft_refund_equipment_" + suffix
+	defer func() {
+		_, _ = pg.pool.Exec(ctx, `DELETE FROM accounts WHERE solana_wallet_address = $1`, wallet)
+		_, _ = pg.pool.Exec(ctx, `DELETE FROM item_catalog WHERE item_id = $1`, itemID)
+	}()
+
+	account := pg.UpsertAccountByWallet(wallet)
+	character, err := pg.CreateCharacter(account.ID, "NFTRefundHero")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pg.pool.Exec(ctx, `
+		INSERT INTO item_catalog (item_id, name, category, rarity, stackable, tradable, default_bind_type)
+		VALUES ($1, $1, 'weapon', 3, FALSE, TRUE, 'UNBOUND')
+	`, itemID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pg.pool.Exec(ctx, `
+		INSERT INTO equipment_items (
+			equipment_uid, account_id, character_id, item_id, location, slot, rarity, bind_type, durability, max_durability
+		) VALUES ($1, $2, $3, $4, 'IN_BAG', 0, 3, 'UNBOUND', 100, 100)
+	`, equipUID, account.ID, character.ID, itemID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pg.GrantLocked(account.ID, 200, "test", "nft-refund-locked-"+suffix, time.Now().UTC().Add(24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pg.pool.Exec(ctx, `
+		UPDATE account_tokens
+		SET withdrawable_balance = withdrawable_balance + 200,
+			external_balance = external_balance + 300,
+			token_balance = token_balance + 500
+		WHERE account_id = $1
+	`, account.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	requested, err := pg.RequestNFTMint(NFTMintRequestInput{
+		OpID: "nft_refund_request_" + suffix, AccountID: account.ID, CharacterID: character.ID,
+		EquipmentUID: equipUID, Rules: NFTRules{}.WithDefaults(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	spent := pg.Token(account.ID)
+	if spent.TokenBalance != 200 || spent.LockedBalance != 0 || spent.WithdrawableBalance != 0 || spent.ExternalBalance != 200 {
+		t.Fatalf("balances after fee = %+v", spent)
+	}
+
+	if _, err := pg.CancelNFTMint("nft_refund_cancel_"+suffix, account.ID, requested.Request.ID); err != nil {
+		t.Fatal(err)
+	}
+	refunded := pg.Token(account.ID)
+	if refunded.TokenBalance != 700 || refunded.LockedBalance != 200 || refunded.WithdrawableBalance != 200 || refunded.ExternalBalance != 300 {
+		t.Fatalf("balances after refund = %+v", refunded)
 	}
 }
 

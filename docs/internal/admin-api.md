@@ -1,16 +1,54 @@
 # Admin API
 
-`admin-api` (default `:8083`) is the privileged ops surface. All routes below
-require:
+> 当前、完整的管理员接口文档见
+> [`docs/api/admin-interface-reference.md`](../api/admin-interface-reference.md)。本页仅保留内部速查信息。
+
+`admin-api` (default `:8083`) is the privileged ops surface. Ordinary-admin
+routes use a short-lived signed-login JWT:
 
 ```http
-Authorization: Bearer <ADMIN_TOKEN>
+Authorization: Bearer <admin-login-jwt>
 ```
 
-Default local token: `dev-admin-token` (`ADMIN_TOKEN` env).
+Super administrators first create an ordinary admin with an Ed25519 public key:
 
-On-chain NFT mint signing remains stubbed; admin can still list pending mint
-requests and confirm with a stub / operator-supplied mint address.
+```http
+POST /api/admin/admin-users
+X-Super-Admin-Key: <SUPER_ADMIN_OPS_KEY>
+```
+
+The ordinary admin then calls `GET /api/admin/auth/nonce?adminId=...`, signs the
+returned message, and posts it to `POST /api/admin/auth/login`. The returned JWT
+uses `ADMIN_SESSION_TTL_MINUTES` (default 30). Expiry or disablement causes later
+requests to return `401`, so clients should clear local admin state and request a
+new signature.
+
+`ADMIN_TOKEN=dev-admin-token` remains only a development/test compatibility
+fallback.
+
+Super-admin operations use a separate header:
+
+```http
+X-Super-Admin-Key: <SUPER_ADMIN_OPS_KEY>
+```
+
+With `SUPER_ADMIN_OPS_KEY` configured, an `ADMIN_TOKEN` cannot call
+super-admin-only operations. The local development compatibility fallback is
+documented in the public admin API reference.
+
+On-chain NFT mint signing remains stubbed. Development and test may confirm with
+the stub / operator-supplied mint address; staging and production fail closed
+until the Core adapter is configured.
+
+## Admin users
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `GET` | `/api/admin/auth/nonce?adminId=` | Public challenge for configured admin public key |
+| `POST` | `/api/admin/auth/login` | `{ adminId, nonce, signature }` returns short-lived JWT |
+| `GET` | `/api/admin/admin-users?status=` | Super-admin list |
+| `POST` | `/api/admin/admin-users` | Super-admin create ordinary admin public key |
+| `DELETE` | `/api/admin/admin-users/{adminId}` | Super-admin soft-disable |
 
 ## Account
 
@@ -21,6 +59,21 @@ requests and confirm with a stub / operator-supplied mint address.
 | `POST` | `/api/admin/accounts/risk-level` | `{ accountId, riskLevel, reason }` |
 | `POST` | `/api/admin/accounts/license` | `{ accountId, granted, reason }` — grant/revoke trading license |
 | `POST` | `/api/admin/accounts/sessions/revoke` | Force-revoke all ACTIVE sessions |
+
+## Characters and catalog
+
+Ordinary administrators can use these read-only routes for the admin character
+console. They do not require player-side Service Identity headers.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `GET` | `/api/admin/characters?keyword=&accountId=&wallet=&serverId=` | Paginated character search with account status, license and online server |
+| `GET` | `/api/admin/characters/{characterId}?include=account,snapshot,online` | Character detail plus read-only Economy Snapshot fields |
+| `GET` | `/api/admin/characters/{characterId}/ledger?kind=` | Character-filtered economy ledger |
+| `GET` | `/api/admin/characters/{characterId}/audits` | Character/account-related admin audit rows |
+| `GET` | `/api/admin/characters/{characterId}/timeline?types=ledger,audit,risk` | Merged ledger/audit/risk timeline |
+| `GET` | `/api/admin/equipment/{equipmentUid}` | Equipment owner, NFT and marketplace status by UID |
+| `GET` | `/api/admin/catalog/items?grouped=true` | Current Economy config item picker catalog; equipment grant quantity is `1` |
 
 ## Market restrictions
 
@@ -49,7 +102,7 @@ Enforced by marketplace list/buy (`BUY` / `SELL` / `ALL`).
 | `POST` | `/api/admin/withdrawals/review` — `{ id, approve, reason }` |
 | `GET` | `/api/admin/payments?accountId=&status=` |
 | `GET` | `/api/admin/nft/requests?accountId=&status=` |
-| `POST` | `/api/admin/nft/mint/confirm` — `{ requestId, mintAddress?, txSignature?, metadataUri?, opId? }` (stub mint OK) |
+| `POST` | `/api/admin/nft/mint/confirm` — `{ requestId, mintAddress?, txSignature?, metadataUri?, opId? }` (stub only in development/test) |
 
 ## Hot wallet
 
@@ -58,13 +111,41 @@ Enforced by marketplace list/buy (`BUY` / `SELL` / `ALL`).
 | `GET` | `/api/admin/hot-wallet?wallet=` — defaults to `SOLANA_PAYOUT_WALLET` |
 | `POST` | `/api/admin/hot-wallet/pause` — `{ paused, wallet?, reason }` — sets `hot_wallet_status.payouts_paused` |
 
+## Super-admin server ops
+
+All write requests require `opId` and `reason`; a repeated `opId` returns its
+original result rather than performing the write again.
+
+| Method | Path |
+| --- | --- |
+| `GET` | `/api/admin/ops/servers?status=&region=` |
+| `GET` | `/api/admin/ops/servers/online?region=` |
+| `GET` | `/api/admin/ops/servers/{serverId}` |
+| `PUT` | `/api/admin/ops/servers/{serverId}` |
+| `POST` | `/api/admin/ops/servers/{serverId}/status` |
+| `GET` | `/api/admin/ops/servers/online-players?serverId=` |
+| `POST` | `/api/admin/ops/servers/online-players/{accountId}/kick` |
+| `POST` | `/api/admin/ops/characters/{characterId}/grants/rewards` |
+| `POST` | `/api/admin/ops/characters/{characterId}/lottery/draw` |
+| `POST` | `/api/admin/ops/characters/{characterId}/lottery/commit-preview` |
+| `POST` | `/api/admin/ops/compensation/preview` |
+| `GET` | `/api/admin/ops/compensation/previews/{previewId}` |
+| `GET` | `/api/admin/ops/compensation/previews/{previewId}/targets?limit=&offset=&keyword=` |
+| `POST` | `/api/admin/ops/compensation/commit` |
+| `GET` | `/api/admin/ops/payments/economy-orders/{orderId}/trace` |
+| `POST` | `/api/admin/ops/payments/economy-orders/{orderId}/recover` |
+
+奖励使用 Aeonblight 的 Gold 和 AEB 余额类别：`gold`、`withdrawableAeb`、`lockedAeb`、`items`。物品和装备始终进入 Loot Tray；发放、经济账本、审计和幂等结果是同一 PostgreSQL 事务。
+
+补偿先以联合筛选条件创建 30 分钟有效的 Preview，再以该 `previewId` 提交。实际执行在一笔事务内按 250 名角色分批；其中任意角色无法发放时全部回滚。Payment Recovery 只处理已有链上收据的 `SUBMITTED`/`CONFIRMED` 订单，不能伪造交易签名，也不会重放已完成订单。
+
 ## Example
 
 ```bash
-curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
+curl -s -H "Authorization: Bearer $ADMIN_JWT" \
   "http://127.0.0.1:8083/api/admin/accounts?wallet=YourWallet"
 
-curl -s -X POST -H "Authorization: Bearer $ADMIN_TOKEN" \
+curl -s -X POST -H "Authorization: Bearer $ADMIN_JWT" \
   -H "Content-Type: application/json" \
   -d '{"accountId":1,"restrictionType":"ALL","reason":"manual hold"}' \
   http://127.0.0.1:8083/api/admin/market/restrictions

@@ -95,80 +95,46 @@ func (s *PostgresStore) ScanAndCreditDeposits(ctx context.Context, rpc chain.RPC
 	}
 	defer rollback(ctx, tx)
 
-	cursorSlot, err := s.ensureChainCursor(ctx, tx, cfg.CursorName, cfg.Network)
+	cursorSlot, cursorSignature, err := s.ensureChainCursor(ctx, tx, cfg.CursorName, cfg.Network)
 	if err != nil {
 		return out, err
 	}
 
-	sigs, err := rpc.GetSignaturesForAddress(ctx, cfg.DepositWallet, "", cfg.ScanLimit)
-	if err != nil {
-		return out, err
-	}
-	out.Scanned = len(sigs)
 	var maxSlot = cursorSlot
-	for _, sig := range sigs {
-		if sig.Err != nil {
-			out.Ignored++
-			continue
-		}
-		detail, err := rpc.GetTransaction(ctx, sig.Signature)
+	headSignature := ""
+	before := ""
+	stop := false
+	for !stop {
+		sigs, err := rpc.GetSignaturesForAddress(ctx, cfg.DepositWallet, before, cfg.ScanLimit)
 		if err != nil {
 			return out, err
 		}
-		credits := chain.InboundTokenCredits(detail, cfg.DepositWallet, cfg.TokenMint)
-		if len(credits) == 0 {
-			out.Ignored++
-			if sig.Slot > maxSlot {
-				maxSlot = sig.Slot
-			}
-			continue
+		if len(sigs) == 0 {
+			break
 		}
-		for _, credit := range credits {
-			gameAmount := chain.RawToGameAmount(credit.AmountRaw, cfg.TokenDecimals)
-			if gameAmount <= 0 {
-				out.Ignored++
-				continue
+		if headSignature == "" {
+			headSignature = sigs[0].Signature
+		}
+		for _, sig := range sigs {
+			if cursorSignature != "" && sig.Signature == cursorSignature {
+				stop = true
+				break
 			}
-			wallet := strings.TrimSpace(credit.FromOwner)
-			if wallet == "" {
-				out.Ignored++
-				continue
-			}
-			matched, err := s.matchPaymentOrderFromDeposit(ctx, tx, wallet, gameAmount, credit.Signature, cfg.TokenMint, int64(credit.Slot))
-			if err != nil {
+			out.Scanned++
+			if err := s.processDepositSignature(ctx, tx, rpc, cfg, sig, &out, &maxSlot); err != nil {
 				return out, err
 			}
-			if matched {
-				out.PaymentsFulfilled++
-				out.Signatures = append(out.Signatures, credit.Signature)
-				if credit.Slot > maxSlot {
-					maxSlot = credit.Slot
-				}
-				continue
-			}
-			credited, err := s.creditSolanaDeposit(ctx, tx, wallet, cfg.TokenMint, gameAmount, credit.Signature, int64(credit.Slot))
-			if err != nil {
-				return out, err
-			}
-			if credited {
-				out.Credited++
-				out.Signatures = append(out.Signatures, credit.Signature)
-			} else {
-				out.Ignored++
-			}
-			if credit.Slot > maxSlot {
-				maxSlot = credit.Slot
-			}
 		}
-		if sig.Slot > maxSlot {
-			maxSlot = sig.Slot
+		if stop || len(sigs) < cfg.ScanLimit {
+			break
 		}
+		before = sigs[len(sigs)-1].Signature
 	}
 	latest, err := rpc.GetSlot(ctx)
 	if err == nil && latest > maxSlot {
 		maxSlot = latest
 	}
-	if err := s.updateChainCursor(ctx, tx, cfg.CursorName, cfg.Network, maxSlot, latest); err != nil {
+	if err := s.updateChainCursor(ctx, tx, cfg.CursorName, cfg.Network, maxSlot, latest, headSignature); err != nil {
 		return out, err
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -176,6 +142,66 @@ func (s *PostgresStore) ScanAndCreditDeposits(ctx context.Context, rpc chain.RPC
 	}
 	out.CursorSlot = maxSlot
 	return out, nil
+}
+
+func (s *PostgresStore) processDepositSignature(ctx context.Context, tx pgx.Tx, rpc chain.RPC, cfg ChainScanConfig, sig chain.SignatureInfo, out *DepositScanResult, maxSlot *uint64) error {
+	if sig.Err != nil {
+		out.Ignored++
+		return nil
+	}
+	detail, err := rpc.GetTransaction(ctx, sig.Signature)
+	if err != nil {
+		return err
+	}
+	credits := chain.InboundTokenCredits(detail, cfg.DepositWallet, cfg.TokenMint)
+	if len(credits) == 0 {
+		out.Ignored++
+		if sig.Slot > *maxSlot {
+			*maxSlot = sig.Slot
+		}
+		return nil
+	}
+	for _, credit := range credits {
+		gameAmount := chain.RawToGameAmount(credit.AmountRaw, cfg.TokenDecimals)
+		if gameAmount <= 0 {
+			out.Ignored++
+			continue
+		}
+		wallet := strings.TrimSpace(credit.FromOwner)
+		if wallet == "" {
+			out.Ignored++
+			continue
+		}
+		matched, err := s.matchPaymentOrderFromDeposit(ctx, tx, wallet, gameAmount, credit.Signature, cfg.TokenMint, int64(credit.Slot))
+		if err != nil {
+			return err
+		}
+		if matched {
+			out.PaymentsFulfilled++
+			out.Signatures = append(out.Signatures, credit.Signature)
+			if credit.Slot > *maxSlot {
+				*maxSlot = credit.Slot
+			}
+			continue
+		}
+		credited, err := s.creditSolanaDeposit(ctx, tx, wallet, cfg.TokenMint, gameAmount, credit.Signature, int64(credit.Slot))
+		if err != nil {
+			return err
+		}
+		if credited {
+			out.Credited++
+			out.Signatures = append(out.Signatures, credit.Signature)
+		} else {
+			out.Ignored++
+		}
+		if credit.Slot > *maxSlot {
+			*maxSlot = credit.Slot
+		}
+	}
+	if sig.Slot > *maxSlot {
+		*maxSlot = sig.Slot
+	}
+	return nil
 }
 
 // matchPaymentOrderFromDeposit fulfills an open on-chain payment order instead of crediting balance.
@@ -215,12 +241,16 @@ func (s *PostgresStore) matchPaymentOrderFromDeposit(ctx context.Context, tx pgx
 	}
 
 	now := time.Now().UTC()
-	if _, err := tx.Exec(ctx, `
+	tag, err := tx.Exec(ctx, `
 		INSERT INTO solana_deposits (account_id, wallet, token_mint, amount, signature, slot, status, credited_at)
 		VALUES ($1, $2, $3, $4, $5, $6, 'PAYMENT_MATCHED', $7)
 		ON CONFLICT (signature) DO NOTHING
-	`, accountID, wallet, mint, amount, signature, slot, now); err != nil {
+	`, accountID, wallet, mint, amount, signature, slot, now)
+	if err != nil {
 		return false, err
+	}
+	if tag.RowsAffected() == 0 {
+		return false, nil
 	}
 	if _, err := tx.Exec(ctx, `
 		UPDATE economy_payment_orders
@@ -286,27 +316,28 @@ func (s *PostgresStore) creditSolanaDeposit(ctx context.Context, tx pgx.Tx, wall
 	return true, nil
 }
 
-func (s *PostgresStore) ensureChainCursor(ctx context.Context, tx pgx.Tx, name, network string) (uint64, error) {
+func (s *PostgresStore) ensureChainCursor(ctx context.Context, tx pgx.Tx, name, network string) (uint64, string, error) {
 	var slot int64
+	var signature string
 	err := tx.QueryRow(ctx, `
 		INSERT INTO chain_cursors (name, network, cursor_slot)
 		VALUES ($1, $2, 0)
 		ON CONFLICT (name) DO UPDATE SET network = EXCLUDED.network
-		RETURNING cursor_slot
-	`, name, network).Scan(&slot)
-	return uint64(slot), err
+		RETURNING cursor_slot, COALESCE(cursor_signature, '')
+	`, name, network).Scan(&slot, &signature)
+	return uint64(slot), signature, err
 }
 
-func (s *PostgresStore) updateChainCursor(ctx context.Context, tx pgx.Tx, name, network string, cursorSlot, latest uint64) error {
+func (s *PostgresStore) updateChainCursor(ctx context.Context, tx pgx.Tx, name, network string, cursorSlot, latest uint64, signature string) error {
 	lag := int64(0)
 	if latest > cursorSlot {
 		lag = int64(latest - cursorSlot)
 	}
 	_, err := tx.Exec(ctx, `
 		UPDATE chain_cursors
-		SET network = $2, cursor_slot = $3, lag_slots = $4, status = 'OK', updated_at = NOW()
+		SET network = $2, cursor_slot = $3, lag_slots = $4, cursor_signature = NULLIF($5, ''), status = 'OK', updated_at = NOW()
 		WHERE name = $1
-	`, name, network, int64(cursorSlot), lag)
+	`, name, network, int64(cursorSlot), lag, signature)
 	return err
 }
 
@@ -331,7 +362,7 @@ func (s *PostgresStore) ProcessAutoWithdrawalsWithChain(now time.Time, singleMax
 	rows, err := tx.Query(ctx, `
 		SELECT account_id, amount::bigint, processed_at
 		FROM withdrawals
-		WHERE status IN ('SUBMITTED', 'CONFIRMED') AND processed_at IS NOT NULL
+		WHERE status IN ('PAYOUT_CREATED', 'SUBMITTED', 'CONFIRMED') AND processed_at IS NOT NULL
 	`)
 	must(err, "query withdrawal budgets")
 	for rows.Next() {
@@ -433,9 +464,10 @@ func (s *PostgresStore) ProcessAutoWithdrawalsWithChain(now time.Time, singleMax
 					`, row.AccountID, row.Amount, sig)
 				}
 			} else {
-				row.Status = "QUEUED"
+				row.Status = "PAYOUT_CREATED"
 				row.Reason = "awaiting_chain_payout"
-				_, err = tx.Exec(ctx, `UPDATE withdrawals SET reason = $2 WHERE id = $1`, row.ID, row.Reason)
+				row.ProcessedAt = now
+				_, err = tx.Exec(ctx, `UPDATE withdrawals SET status = $2, reason = $3, processed_at = $4 WHERE id = $1`, row.ID, row.Status, row.Reason, now)
 			}
 			_ = payoutWallet
 		}
@@ -768,7 +800,7 @@ func (s *PostgresStore) SubmitPaymentOrderVerified(ctx context.Context, rpc chai
 		return PaymentOrder{}, errors.New("SOLANA_DEPOSIT_WALLET is required for payment verification")
 	}
 
-	return runIdempotentAction(s, "payment_submit_verified", req.OpID, req.AccountID, 0, func(ctx context.Context, tx pgx.Tx) (PaymentOrder, error) {
+	return runIdempotentAction(s, "payment_submit_verified", req.OpID, req.AccountID, 0, req, func(ctx context.Context, tx pgx.Tx) (PaymentOrder, error) {
 		order, err := s.lockPaymentOrder(ctx, tx, req.OrderID)
 		if err != nil {
 			return PaymentOrder{}, err
@@ -810,6 +842,17 @@ func (s *PostgresStore) SubmitPaymentOrderVerified(ctx context.Context, rpc chai
 		}
 
 		now := time.Now().UTC()
+		tag, err := tx.Exec(ctx, `
+			INSERT INTO solana_deposits (account_id, wallet, token_mint, amount, signature, slot, status, credited_at)
+			VALUES ($1, $2, $3, $4, $5, $6, 'PAYMENT_MATCHED', $7)
+			ON CONFLICT (signature) DO NOTHING
+		`, req.AccountID, payerWallet, cfg.TokenMint, order.Amount, sig, int64(detail.Slot), now)
+		if err != nil {
+			return PaymentOrder{}, err
+		}
+		if tag.RowsAffected() == 0 {
+			return PaymentOrder{}, errors.New("chain receipt was already consumed")
+		}
 		if _, err := tx.Exec(ctx, `
 			UPDATE economy_payment_orders
 			SET status = 'SUBMITTED', tx_signature = $2, submitted_at = COALESCE(submitted_at, $3), confirmed_at = COALESCE(confirmed_at, $3)
@@ -835,14 +878,17 @@ func (s *PostgresStore) ConfirmPaymentOrder(ctx context.Context, orderID, reason
 	if err != nil {
 		return PaymentOrder{}, err
 	}
-	if order.Status != "SUBMITTED" && order.Status != "CONFIRMED" && order.Status != "PENDING_PAYMENT" {
-		return PaymentOrder{}, fmt.Errorf("order status %s cannot be confirmed", order.Status)
-	}
-	now := time.Now().UTC()
 	if order.Status == "FULFILLED" {
 		_ = tx.Commit(ctx)
 		return order, nil
 	}
+	if order.Status != "SUBMITTED" && order.Status != "CONFIRMED" {
+		return PaymentOrder{}, fmt.Errorf("order status %s cannot be confirmed without a submitted chain receipt", order.Status)
+	}
+	if strings.TrimSpace(order.TxSignature) == "" || order.SubmittedAt == nil {
+		return PaymentOrder{}, errors.New("submitted payment order is missing its chain receipt")
+	}
+	now := time.Now().UTC()
 	if _, err := tx.Exec(ctx, `
 		UPDATE economy_payment_orders
 		SET status = 'CONFIRMED', confirmed_at = COALESCE(confirmed_at, $2)
@@ -950,6 +996,17 @@ func (s *PostgresStore) fulfillPaymentOrderTx(ctx context.Context, tx pgx.Tx, or
 			    updated_at = NOW()
 			WHERE id = $1
 		`, order.AccountID, now); err != nil {
+			return PaymentOrder{}, err
+		}
+	case PaymentPurposeLotteryDraw:
+		if order.CharacterID <= 0 {
+			return PaymentOrder{}, errors.New("lottery order missing characterId")
+		}
+		if err := s.fulfillLotteryPaymentTx(ctx, tx, order); err != nil {
+			return PaymentOrder{}, err
+		}
+	case PaymentPurposeBountySlotUnlock, PaymentPurposeBountyPremiumRefresh:
+		if err := s.fulfillBountyPaymentTx(ctx, tx, order); err != nil {
 			return PaymentOrder{}, err
 		}
 	default:

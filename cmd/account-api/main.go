@@ -12,9 +12,16 @@ import (
 
 func main() {
 	cfg := config.Load("account-api", ":8081")
+	if err := cfg.ValidateStartup(); err != nil {
+		log.Fatal(err)
+	}
 	st, closeStore := store.Open(context.Background(), cfg)
 	defer closeStore()
-	handler := account.NewHandler(cfg, st)
+	handler, err := account.OpenHandler(cfg, st)
+	if err != nil {
+		log.Fatalf("open account runtime dependencies: %v", err)
+	}
+	defer handler.Close()
 	log.Printf("%s listening on %s", cfg.ServiceName, cfg.Addr)
 	log.Fatal(http.ListenAndServe(cfg.Addr, handler.Routes()))
 }

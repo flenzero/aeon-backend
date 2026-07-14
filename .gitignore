@@ -8,6 +8,8 @@ local.env
 bin/
 dist/
 work/
+outputs/packages/
+outputs/.cache/
 *.exe
 *.test
 .DS_Store

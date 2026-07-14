@@ -8,31 +8,388 @@
           "floorId": 1,
           "isBoss": false,
           "enterCost": {
-            "gold": 0,
+            "gold": 2,
             "items": []
           },
           "maxExp": 30,
-          "lootPoolId": "dungeon_ch0_floor1"
+          "lootPoolId": "dungeon_ch0_f1_3",
+          "enemyHpScale": 0.66,
+          "enemyAtkScale": 0.32
         },
         {
           "floorId": 2,
           "isBoss": false,
           "enterCost": {
-            "gold": 0,
+            "gold": 4,
             "items": []
           },
-          "maxExp": 35,
-          "lootPoolId": "dungeon_ch0_floor1"
+          "maxExp": 40,
+          "lootPoolId": "dungeon_ch0_f1_3",
+          "enemyHpScale": 1.015,
+          "enemyAtkScale": 0.493
+        },
+        {
+          "floorId": 3,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 6,
+            "items": []
+          },
+          "maxExp": 50,
+          "lootPoolId": "dungeon_ch0_f1_3",
+          "enemyHpScale": 1.1544,
+          "enemyAtkScale": 0.546
+        },
+        {
+          "floorId": 4,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 12,
+            "items": []
+          },
+          "maxExp": 60,
+          "lootPoolId": "dungeon_ch0_f4_6",
+          "enemyHpScale": 1.0902,
+          "enemyAtkScale": 0.5106
+        },
+        {
+          "floorId": 5,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 15,
+            "items": []
+          },
+          "maxExp": 70,
+          "lootPoolId": "dungeon_ch0_f4_6",
+          "enemyHpScale": 1.0956,
+          "enemyAtkScale": 0.5016
+        },
+        {
+          "floorId": 6,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 18,
+            "items": []
+          },
+          "maxExp": 80,
+          "lootPoolId": "dungeon_ch0_f4_6",
+          "enemyHpScale": 2.1924,
+          "enemyAtkScale": 0.2286
+        },
+        {
+          "floorId": 7,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 21,
+            "items": []
+          },
+          "maxExp": 90,
+          "lootPoolId": "dungeon_ch0_f7_9",
+          "enemyHpScale": 2.184,
+          "enemyAtkScale": 0.252
+        },
+        {
+          "floorId": 8,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 24,
+            "items": []
+          },
+          "maxExp": 100,
+          "lootPoolId": "dungeon_ch0_f7_9",
+          "enemyHpScale": 1.539,
+          "enemyAtkScale": 0.3822
+        },
+        {
+          "floorId": 9,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 27,
+            "items": []
+          },
+          "maxExp": 110,
+          "lootPoolId": "dungeon_ch0_f7_9",
+          "enemyHpScale": 1.296,
+          "enemyAtkScale": 0.405
         },
         {
           "floorId": 10,
           "isBoss": true,
           "enterCost": {
-            "gold": 0,
+            "gold": 54,
+            "items": [
+              {
+                "itemId": "boss_ticket_ashen_threshold",
+                "quantity": 1
+              }
+            ]
+          },
+          "maxExp": 180,
+          "lootPoolId": "dungeon_ch0_boss",
+          "enemyHpScale": 1.08,
+          "enemyAtkScale": 0.756
+        }
+      ]
+    },
+    {
+      "chapterId": 1,
+      "name": "Gloomwood",
+      "floors": [
+        {
+          "floorId": 11,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 32,
             "items": []
           },
-          "maxExp": 120,
-          "lootPoolId": "dungeon_ch0_boss"
+          "maxExp": 130,
+          "lootPoolId": "dungeon_ch1_f11_13",
+          "enemyHpScale": 4.536,
+          "enemyAtkScale": 0.1143
+        },
+        {
+          "floorId": 12,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 34,
+            "items": []
+          },
+          "maxExp": 140,
+          "lootPoolId": "dungeon_ch1_f11_13",
+          "enemyHpScale": 6.5664,
+          "enemyAtkScale": 0.0884
+        },
+        {
+          "floorId": 13,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 36,
+            "items": []
+          },
+          "maxExp": 150,
+          "lootPoolId": "dungeon_ch1_f11_13",
+          "enemyHpScale": 6.3648,
+          "enemyAtkScale": 0.1038
+        },
+        {
+          "floorId": 14,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 42,
+            "items": []
+          },
+          "maxExp": 160,
+          "lootPoolId": "dungeon_ch1_f14_16",
+          "enemyHpScale": 4.4064,
+          "enemyAtkScale": 0.1659
+        },
+        {
+          "floorId": 15,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 45,
+            "items": []
+          },
+          "maxExp": 170,
+          "lootPoolId": "dungeon_ch1_f14_16",
+          "enemyHpScale": 3.8988,
+          "enemyAtkScale": 0.2063
+        },
+        {
+          "floorId": 16,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 48,
+            "items": []
+          },
+          "maxExp": 180,
+          "lootPoolId": "dungeon_ch1_f14_16",
+          "enemyHpScale": 2.16,
+          "enemyAtkScale": 0.416
+        },
+        {
+          "floorId": 17,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 51,
+            "items": []
+          },
+          "maxExp": 190,
+          "lootPoolId": "dungeon_ch1_f17_19",
+          "enemyHpScale": 1.7842,
+          "enemyAtkScale": 0.5492
+        },
+        {
+          "floorId": 18,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 54,
+            "items": []
+          },
+          "maxExp": 200,
+          "lootPoolId": "dungeon_ch1_f17_19",
+          "enemyHpScale": 1.8691,
+          "enemyAtkScale": 0.5695
+        },
+        {
+          "floorId": 19,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 57,
+            "items": []
+          },
+          "maxExp": 210,
+          "lootPoolId": "dungeon_ch1_f17_19",
+          "enemyHpScale": 1.7388,
+          "enemyAtkScale": 0.6629
+        },
+        {
+          "floorId": 20,
+          "isBoss": true,
+          "enterCost": {
+            "gold": 114,
+            "items": [
+              {
+                "itemId": "boss_ticket_gloomwood",
+                "quantity": 1
+              }
+            ]
+          },
+          "maxExp": 330,
+          "lootPoolId": "dungeon_ch1_boss",
+          "enemyHpScale": 0.936,
+          "enemyAtkScale": 0.912
+        }
+      ]
+    },
+    {
+      "chapterId": 2,
+      "name": "Voidscar",
+      "floors": [
+        {
+          "floorId": 21,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 72,
+            "items": []
+          },
+          "maxExp": 230,
+          "lootPoolId": "dungeon_ch2_f21_23",
+          "enemyHpScale": 6.5472,
+          "enemyAtkScale": 0.15
+        },
+        {
+          "floorId": 22,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 74,
+            "items": []
+          },
+          "maxExp": 240,
+          "lootPoolId": "dungeon_ch2_f21_23",
+          "enemyHpScale": 6.8352,
+          "enemyAtkScale": 0.1537
+        },
+        {
+          "floorId": 23,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 76,
+            "items": []
+          },
+          "maxExp": 250,
+          "lootPoolId": "dungeon_ch2_f21_23",
+          "enemyHpScale": 5.7456,
+          "enemyAtkScale": 0.1967
+        },
+        {
+          "floorId": 24,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 82,
+            "items": []
+          },
+          "maxExp": 260,
+          "lootPoolId": "dungeon_ch2_f24_26",
+          "enemyHpScale": 5.0142,
+          "enemyAtkScale": 0.24
+        },
+        {
+          "floorId": 25,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 85,
+            "items": []
+          },
+          "maxExp": 270,
+          "lootPoolId": "dungeon_ch2_f24_26",
+          "enemyHpScale": 3.8916,
+          "enemyAtkScale": 0.3287
+        },
+        {
+          "floorId": 26,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 88,
+            "items": []
+          },
+          "maxExp": 280,
+          "lootPoolId": "dungeon_ch2_f24_26",
+          "enemyHpScale": 2.9434,
+          "enemyAtkScale": 0.4571
+        },
+        {
+          "floorId": 27,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 91,
+            "items": []
+          },
+          "maxExp": 290,
+          "lootPoolId": "dungeon_ch2_f27_29",
+          "enemyHpScale": 2.124,
+          "enemyAtkScale": 0.6712
+        },
+        {
+          "floorId": 28,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 94,
+            "items": []
+          },
+          "maxExp": 300,
+          "lootPoolId": "dungeon_ch2_f27_29",
+          "enemyHpScale": 1.885,
+          "enemyAtkScale": 0.8
+        },
+        {
+          "floorId": 29,
+          "isBoss": false,
+          "enterCost": {
+            "gold": 97,
+            "items": []
+          },
+          "maxExp": 310,
+          "lootPoolId": "dungeon_ch2_f27_29",
+          "enemyHpScale": 1.8581,
+          "enemyAtkScale": 0.8571
+        },
+        {
+          "floorId": 30,
+          "isBoss": true,
+          "enterCost": {
+            "gold": 194,
+            "items": [
+              {
+                "itemId": "boss_ticket_voidscar",
+                "quantity": 1
+              }
+            ]
+          },
+          "maxExp": 480,
+          "lootPoolId": "dungeon_ch2_boss",
+          "enemyHpScale": 1.104,
+          "enemyAtkScale": 1.008
         }
       ]
     }

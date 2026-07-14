@@ -16,7 +16,7 @@ redis
 The first version keeps the service boundaries strict while using one repository
 and shared internal packages. The HTTP services can be restarted independently in
 Docker. The worker is deployed as its own process because it advances economy
-state machines such as locked GAME unlocks and withdrawals.
+state machines such as locked AEB unlocks and withdrawals.
 
 ## Configuration
 
@@ -37,7 +37,9 @@ docker compose -f deploy/docker-compose.yml --env-file local.env up -d
 
 ```bash
 cp local.env.example local.env
-docker compose -f deploy/docker-compose.yml --env-file local.env up -d postgres
+docker compose -f deploy/docker-compose.yml --env-file local.env up -d postgres redis
+DATABASE_URL='postgres://aeonblight:aeonblight_dev_password@127.0.0.1:55432/aeonblight_game?sslmode=disable' \
+  ./scripts/db-migrate.sh bootstrap
 go test ./...
 go run ./cmd/account-api
 go run ./cmd/economy-api
@@ -52,7 +54,8 @@ contracts, four binaries, and PostgreSQL/Redis integration):
 ./test/run.sh --full
 ```
 
-See [`test/README.md`](test/README.md) for automatic mode and exact coverage.
+See [`test/README.md`](test/README.md) for `unit`, `contract`, `integration`,
+and `full` coverage.
 
 Default ports:
 
@@ -74,7 +77,7 @@ Implemented first:
 
 - Account wallet nonce, Solana signature login, durable sessions (Postgres +
   Redis), refresh/logout, game-server registry and online presence.
-- Economy balance, locked GAME records, unlock settlement, withdrawal request
+- Economy balance, locked AEB records, unlock settlement, withdrawal request
   and automatic withdrawal queue logic.
 - Character economy snapshot with account token, Gold/Gems, inventory,
   warehouse, loot tray and equipment instance reads.
@@ -94,14 +97,20 @@ Implemented first:
 - Warehouse organize for warehouse slot compaction and stack merging.
 - Config-driven gathering and farming harvest settlements that place item and
   equipment rewards directly into the bag, while token rewards still enter
-  locked GAME.
+  locked AEB.
 - Config-driven boss contribution and settlement with participation floor,
   contribution-weighted loot pools and loot-tray materialization.
 - Internal boss event lifecycle APIs to open, close and mark events settled.
 - Admin review actions and audit ledger.
+- Ed25519 ordinary-admin public-key provisioning, one-time signed login
+  challenge, short-lived admin JWTs and immediate disablement enforcement.
 - Economy worker loop as an independent process.
 - Docker build and compose files for independent service restart.
 - Canonical full Postgres schema target in `migrations/aeonblight_full_schema.sql`.
+- Explicit-only database migration command in `scripts/db-migrate.sh`; application
+  and Docker startup never mutate schema.
+- Runtime profiles, aggregated startup validation, and separate `/health` and
+  dependency-aware `/ready` endpoints.
 - First-pass Postgres store adapter selected by `DATABASE_URL`.
 - Complete first-pass single-database model for account, economy, admin,
   game-server coordination and Solana chain accounting.
@@ -123,9 +132,48 @@ Shared
   -> redis (account sessions / online presence)
 ```
 
+## Production service identities
+
+Production and staging do not accept a shared `INTERNAL_KEY`. Every game server,
+worker or operator process uses its own Ed25519 key pair and registered service
+identity. The private key stays on that process; the super administrator stores
+only the public key and approved capability set.
+
+- `POST /api/admin/service-identities`: super administrator creates/approves an identity.
+- `GET /api/admin/service-identities`: administrators may inspect active/disabled identities.
+- `DELETE /api/admin/service-identities/{serviceId}`: super administrator soft-disables it; audit history is retained and subsequent requests are rejected immediately.
+- Game-server identities are also bound to one `subjectId`/`serverId`, so one server cannot heartbeat, consume tickets for, or inspect/mutate online presence owned by another server.
+
+Signed requests carry `X-Service-Id`, `X-Service-Timestamp`, `X-Service-Nonce`
+and `X-Service-Signature`. The signature covers method, escaped path/query and
+the SHA-256 body hash. Nonces are one-time and timestamps default to a two-minute
+window. `INTERNAL_KEY` remains only as an explicit development/test compatibility
+path and must be empty in staging/production.
+
+## Dungeon reconnect recovery
+
+`GET /api/game/dungeon/recovery?characterId=...` is called with the player's JWT
+when entering the home screen. A `STARTED` dungeon returns `required=true` plus
+its `dungeonRunId` and original `serverId`. Redis keeps the hot recovery hint,
+while PostgreSQL confirms the run is still active so stale Redis data cannot
+resurrect a finished run.
+
+`POST /api/game/dungeon/recovery` requires the still-active `sessionId` and
+accepts `action=resume|abandon`:
+
+- `resume` requires the active session and returns a 90-second Launch Ticket
+  restricted to the original server;
+- `abandon` atomically changes the run to `CANCELLED`, invalidates outstanding
+  resume tickets, clears the Redis hint and grants no experience, loot or AEB.
+
+Until the run is finished or abandoned, ordinary launch into a different server
+is rejected. A character can have at most one `STARTED` dungeon.
+
 Still intentionally stubbed / next:
 
-- On-chain Solana NFT mint (current confirm uses stub mint address until chain mint is wired)
+- Metaplex Core on-chain NFT mint/freeze/transfer reconciliation (development/test
+  may use the stub; staging/production fail closed until the adapter is wired)
+- Ed25519 super-admin authentication beyond the current operations key
 - Account-link graph tooling and automated risk scoring
 
 Recently completed:
@@ -156,13 +204,17 @@ Local Docker defaults:
 ```bash
 docker compose -f deploy/docker-compose.yml up -d postgres
 DATABASE_URL='postgres://aeonblight:aeonblight_dev_password@127.0.0.1:55432/aeonblight_game?sslmode=disable' \
+  ./scripts/db-migrate.sh bootstrap
+DATABASE_URL='postgres://aeonblight:aeonblight_dev_password@127.0.0.1:55432/aeonblight_game?sslmode=disable' \
   go test ./internal/platform/store -run TestPostgresStoreIntegration -count=1 -v
 ```
 
 ## Database SQL Strategy
 
 - `migrations/aeonblight_full_schema.sql` is the canonical full database schema.
-- Fresh Docker initialization mounts only that full schema file.
+- Docker and all four application processes never execute migrations.
+- A technician explicitly runs `scripts/db-migrate.sh bootstrap` for a new
+  database or `scripts/db-migrate.sh up` for an existing database.
 - Future production deltas go under `migrations/updates/` with explicit names
   such as `0002_add_inventory_actions.sql`.
 - Every accepted update must also be folded back into
@@ -175,3 +227,11 @@ See `docs/internal/data-model.md` for the shared database model.
 See `docs/internal/gamefi-economy-system-v0.2.md` for the current economy design.
 See `docs/internal/migration-handoff.md` for the current progress, Grill-Me
 constraints and migration instructions for `/Users/TJ/code/Project/SOLP/game-backend`.
+See `docs/internal/implementation-progress-2026-07-12.md` for the current
+implementation checkpoint and remaining roadmap.
+
+## API Documentation
+
+- [`docs/api/interface-list.md`](docs/api/interface-list.md): non-admin API quick list
+- [`docs/api/interface-reference.md`](docs/api/interface-reference.md): non-admin API integration reference
+- [`docs/api/admin-interface-reference.md`](docs/api/admin-interface-reference.md): independent administrator API reference

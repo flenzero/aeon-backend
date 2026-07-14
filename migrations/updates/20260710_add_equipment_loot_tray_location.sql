@@ -20,4 +20,8 @@ ALTER TABLE equipment_items
       'BURNED'
     ));
 
+INSERT INTO schema_migrations (version)
+VALUES ('20260710_add_equipment_loot_tray_location')
+ON CONFLICT DO NOTHING;
+
 COMMIT;

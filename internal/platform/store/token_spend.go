@@ -10,10 +10,16 @@ import (
 )
 
 type TokenSpendBreakdown struct {
-	Locked       int64
-	Withdrawable int64
-	External     int64
-	SpendSource  string
+	Locked         int64                `json:"locked"`
+	Withdrawable   int64                `json:"withdrawable"`
+	External       int64                `json:"external"`
+	SpendSource    string               `json:"spendSource"`
+	LockedSegments []LockedSpendSegment `json:"lockedSegments,omitempty"`
+}
+
+type LockedSpendSegment struct {
+	Amount   int64     `json:"amount"`
+	UnlockAt time.Time `json:"unlockAt"`
 }
 
 func bpsAmount(amount, bps int64) int64 {
@@ -91,10 +97,12 @@ func (s *PostgresStore) spendTokenInTx(ctx context.Context, tx pgx.Tx, accountID
 		if take > lockedBal {
 			take = lockedBal
 		}
-		if err := s.consumeLockedTokenFIFO(ctx, tx, accountID, take); err != nil {
+		segments, err := s.consumeLockedTokenFIFO(ctx, tx, accountID, take)
+		if err != nil {
 			return zero, err
 		}
 		out.Locked = take
+		out.LockedSegments = segments
 		remaining -= take
 	}
 	if remaining > 0 && withdrawableBal > 0 {
@@ -137,36 +145,38 @@ func (s *PostgresStore) spendTokenInTx(ctx context.Context, tx pgx.Tx, accountID
 	return out, nil
 }
 
-func (s *PostgresStore) consumeLockedTokenFIFO(ctx context.Context, tx pgx.Tx, accountID, amount int64) error {
+func (s *PostgresStore) consumeLockedTokenFIFO(ctx context.Context, tx pgx.Tx, accountID, amount int64) ([]LockedSpendSegment, error) {
 	rows, err := tx.Query(ctx, `
-		SELECT id, remaining_amount::bigint
+		SELECT id, remaining_amount::bigint, unlock_at
 		FROM locked_token_records
 		WHERE account_id = $1 AND status = 'LOCKED' AND remaining_amount > 0
 		ORDER BY unlock_at, id
 		FOR UPDATE
 	`, accountID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer rows.Close()
 
 	type lockedRow struct {
-		ID  int64
-		Rem int64
+		ID       int64
+		Rem      int64
+		UnlockAt time.Time
 	}
 	var list []lockedRow
 	for rows.Next() {
 		var row lockedRow
-		if err := rows.Scan(&row.ID, &row.Rem); err != nil {
-			return err
+		if err := rows.Scan(&row.ID, &row.Rem, &row.UnlockAt); err != nil {
+			return nil, err
 		}
 		list = append(list, row)
 	}
 	if err := rows.Err(); err != nil {
-		return err
+		return nil, err
 	}
 
 	remaining := amount
+	segments := make([]LockedSpendSegment, 0, len(list))
 	for _, row := range list {
 		if remaining <= 0 {
 			break
@@ -182,7 +192,7 @@ func (s *PostgresStore) consumeLockedTokenFIFO(ctx context.Context, tx pgx.Tx, a
 				SET remaining_amount = 0, status = 'CONSUMED', settled_at = NOW()
 				WHERE id = $1
 			`, row.ID); err != nil {
-				return err
+				return nil, err
 			}
 		} else {
 			if _, err := tx.Exec(ctx, `
@@ -190,15 +200,16 @@ func (s *PostgresStore) consumeLockedTokenFIFO(ctx context.Context, tx pgx.Tx, a
 				SET remaining_amount = $2
 				WHERE id = $1
 			`, row.ID, newRem); err != nil {
-				return err
+				return nil, err
 			}
 		}
+		segments = append(segments, LockedSpendSegment{Amount: take, UnlockAt: row.UnlockAt})
 		remaining -= take
 	}
 	if remaining > 0 {
-		return fmt.Errorf("%w: locked token records", ErrInsufficientBalance)
+		return nil, fmt.Errorf("%w: locked token records", ErrInsufficientBalance)
 	}
-	return nil
+	return segments, nil
 }
 
 func (s *PostgresStore) insertSystemConsumption(ctx context.Context, tx pgx.Tx, opID string, accountID, characterID int64, spend TokenSpendBreakdown, purpose string, amount, burn, recycle, rewards int64, metadata string) error {

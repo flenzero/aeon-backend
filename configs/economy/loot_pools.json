@@ -1,30 +1,281 @@
 {
   "lootPools": [
     {
-      "lootPoolId": "dungeon_ch0_floor1",
+      "lootPoolId": "dungeon_ch0_f1_3",
       "entries": [
         {
-          "rewardType": "item",
-          "itemId": "shadow_iron",
-          "quantityMin": 1,
-          "quantityMax": 2,
-          "dropChance": 0.75
-        },
-        {
-          "rewardType": "item",
-          "itemId": "gloomcap_spore",
+          "rewardType": "equipment",
+          "itemId": "ashbound_sword_t1",
           "quantityMin": 1,
           "quantityMax": 1,
-          "dropChance": 0.2
+          "dropChance": 0.1631,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
         },
         {
           "rewardType": "equipment",
-          "itemId": "rusted_saber",
+          "itemId": "ashbound_gloves_t1",
           "quantityMin": 1,
           "quantityMax": 1,
-          "dropChance": 0.08,
+          "dropChance": 0.1305,
           "rarity": 1,
-          "affixPoolId": "early_weapon_affixes"
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_helmet_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1088,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_shoes_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1088,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_cloak_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.087,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_bow_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1088,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_axe_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.087,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_chest_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.087,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_accessory_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.087,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "item",
+          "itemId": "boss_ticket_ashen_threshold",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.05
+        }
+      ]
+    },
+    {
+      "lootPoolId": "dungeon_ch0_f4_6",
+      "entries": [
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_sword_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1631,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_gloves_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1305,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_helmet_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1088,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_shoes_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1088,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_cloak_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.087,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_bow_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1088,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_axe_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.087,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_chest_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.087,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_accessory_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.087,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "item",
+          "itemId": "boss_ticket_ashen_threshold",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.07
+        }
+      ]
+    },
+    {
+      "lootPoolId": "dungeon_ch0_f7_9",
+      "entries": [
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_sword_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1631,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_gloves_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1305,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_helmet_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1088,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_shoes_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1088,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_cloak_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.087,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_bow_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1088,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_axe_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.087,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_chest_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.087,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "ashbound_accessory_t1",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.087,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "item",
+          "itemId": "boss_ticket_ashen_threshold",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.09
         }
       ]
     },
@@ -32,63 +283,892 @@
       "lootPoolId": "dungeon_ch0_boss",
       "entries": [
         {
-          "rewardType": "item",
-          "itemId": "aeon_shard",
+          "rewardType": "equipment",
+          "itemId": "gloomhide_sword_t5",
           "quantityMin": 1,
           "quantityMax": 1,
-          "dropChance": 0.45
+          "dropChance": 0.1875,
+          "rarity": 2,
+          "affixPoolId": "weapon_affixes"
         },
         {
           "rewardType": "equipment",
-          "itemId": "nightglass_staff",
+          "itemId": "gloomhide_helmet_t5",
           "quantityMin": 1,
           "quantityMax": 1,
-          "dropChance": 0.12,
-          "rarity": 3,
-          "affixPoolId": "early_weapon_affixes"
+          "dropChance": 0.1312,
+          "rarity": 2,
+          "affixPoolId": "non_weapon_affixes"
         },
         {
-          "rewardType": "token",
-          "itemId": "GAME",
+          "rewardType": "equipment",
+          "itemId": "gloomhide_gloves_t5",
           "quantityMin": 1,
-          "quantityMax": 3,
-          "dropChance": 0.1
+          "quantityMax": 1,
+          "dropChance": 0.0938,
+          "rarity": 2,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "gloomhide_bow_t5",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.15,
+          "rarity": 2,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "gloomhide_chest_t5",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1125,
+          "rarity": 2,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "gloomhide_accessory_t5",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1125,
+          "rarity": 2,
+          "affixPoolId": "non_weapon_affixes"
         }
       ]
     },
     {
-      "lootPoolId": "gather_shadow_woods",
+      "lootPoolId": "dungeon_ch1_f11_13",
       "entries": [
         {
-          "rewardType": "item",
-          "itemId": "shadow_iron",
-          "quantityMin": 1,
-          "quantityMax": 3,
-          "dropChance": 0.9
-        },
-        {
-          "rewardType": "item",
-          "itemId": "aeon_shard",
+          "rewardType": "equipment",
+          "itemId": "shadowiron_shoes_t10",
           "quantityMin": 1,
           "quantityMax": 1,
-          "dropChance": 0.03
-        },
-        {
-          "rewardType": "token",
-          "itemId": "GAME",
-          "quantityMin": 1,
-          "quantityMax": 1,
-          "dropChance": 0.02
+          "dropChance": 0.1328,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
         },
         {
           "rewardType": "equipment",
-          "itemId": "rusted_saber",
+          "itemId": "shadowiron_cloak_t10",
           "quantityMin": 1,
           "quantityMax": 1,
-          "dropChance": 0.01,
+          "dropChance": 0.1062,
           "rarity": 1,
-          "affixPoolId": "gathering_tool_affixes"
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_gloves_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0885,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_axe_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0885,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_bow_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0708,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_helmet_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0708,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "item",
+          "itemId": "ashwood_white",
+          "quantityMin": 3,
+          "quantityMax": 3,
+          "dropChance": 0.225
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_sword_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0885,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_chest_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0708,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_staff_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0708,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_accessory_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0708,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "item",
+          "itemId": "boss_ticket_gloomwood",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.03
         }
+      ]
+    },
+    {
+      "lootPoolId": "dungeon_ch1_f14_16",
+      "entries": [
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_shoes_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1328,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_cloak_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1062,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_gloves_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0885,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_axe_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0885,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_bow_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0708,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_helmet_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0708,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "item",
+          "itemId": "ashwood_white",
+          "quantityMin": 3,
+          "quantityMax": 3,
+          "dropChance": 0.225
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_sword_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0885,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_chest_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0708,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_staff_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0708,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_accessory_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0708,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "item",
+          "itemId": "boss_ticket_gloomwood",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.05
+        }
+      ]
+    },
+    {
+      "lootPoolId": "dungeon_ch1_f17_19",
+      "entries": [
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_shoes_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1328,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_cloak_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1062,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_gloves_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0885,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_axe_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0885,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_bow_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0708,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_helmet_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0708,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "item",
+          "itemId": "ashwood_white",
+          "quantityMin": 3,
+          "quantityMax": 3,
+          "dropChance": 0.225
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_sword_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0885,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_chest_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0708,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_staff_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0708,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "shadowiron_accessory_t10",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0708,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "item",
+          "itemId": "boss_ticket_gloomwood",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.07
+        }
+      ]
+    },
+    {
+      "lootPoolId": "dungeon_ch1_boss",
+      "entries": [
+        {
+          "rewardType": "equipment",
+          "itemId": "nightglass_chest_t15",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.3188,
+          "rarity": 2,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "nightglass_staff_t15",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.255,
+          "rarity": 2,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "nightglass_bow_t15",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1913,
+          "rarity": 2,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "nightglass_cloak_t15",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.2231,
+          "rarity": 2,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "nightglass_sword_t15",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1913,
+          "rarity": 2,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "nightglass_accessory_t15",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1913,
+          "rarity": 2,
+          "affixPoolId": "non_weapon_affixes"
+        }
+      ]
+    },
+    {
+      "lootPoolId": "dungeon_ch2_f21_23",
+      "entries": [
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_axe_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1215,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_sword_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1013,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_chest_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1013,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_helmet_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1013,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_staff_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.081,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "item",
+          "itemId": "shadow_iron",
+          "quantityMin": 5,
+          "quantityMax": 5,
+          "dropChance": 0.2625
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_bow_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.081,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_cloak_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.081,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_shoes_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.081,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_accessory_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.081,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "item",
+          "itemId": "boss_ticket_voidscar",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.02
+        }
+      ]
+    },
+    {
+      "lootPoolId": "dungeon_ch2_f24_26",
+      "entries": [
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_axe_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1215,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_sword_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1013,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_chest_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1013,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_helmet_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1013,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_staff_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.081,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "item",
+          "itemId": "shadow_iron",
+          "quantityMin": 5,
+          "quantityMax": 5,
+          "dropChance": 0.2625
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_bow_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.081,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_cloak_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.081,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_shoes_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.081,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_accessory_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.081,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "item",
+          "itemId": "boss_ticket_voidscar",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.04
+        }
+      ]
+    },
+    {
+      "lootPoolId": "dungeon_ch2_f27_29",
+      "entries": [
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_axe_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1215,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_sword_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1013,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_chest_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1013,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_helmet_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1013,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_staff_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.081,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "item",
+          "itemId": "shadow_iron",
+          "quantityMin": 5,
+          "quantityMax": 5,
+          "dropChance": 0.2625
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_bow_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.081,
+          "rarity": 1,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_cloak_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.081,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_shoes_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.081,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "eclipseguard_accessory_t20",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.081,
+          "rarity": 1,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "item",
+          "itemId": "boss_ticket_voidscar",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.06
+        }
+      ]
+    },
+    {
+      "lootPoolId": "dungeon_ch2_boss",
+      "entries": [
+        {
+          "rewardType": "equipment",
+          "itemId": "aeonblight_sword_t30",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.3562,
+          "rarity": 3,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "aeonblight_chest_t30",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.285,
+          "rarity": 3,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "voidforged_staff_t25",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.285,
+          "rarity": 2,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "voidforged_bow_t25",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.2138,
+          "rarity": 2,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "voidforged_axe_t25",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.2138,
+          "rarity": 2,
+          "affixPoolId": "weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "voidforged_chest_t25",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.2494,
+          "rarity": 2,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "voidforged_accessory_t25",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.2138,
+          "rarity": 2,
+          "affixPoolId": "non_weapon_affixes"
+        },
+        {
+          "rewardType": "equipment",
+          "itemId": "aeonblight_accessory_t30",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.1781,
+          "rarity": 3,
+          "affixPoolId": "non_weapon_affixes"
+        }
+      ]
+    },
+    {
+      "lootPoolId": "gather_shadow_woods_ashwood",
+      "entries": [
+        {
+          "rewardType": "item",
+          "itemId": "ashwood_white",
+          "quantityMin": 1,
+          "quantityMax": 3,
+          "dropChance": 1
+        },
+        {
+          "rewardType": "item",
+          "itemId": "ashwood_green",
+          "quantityMin": 1,
+          "quantityMax": 2,
+          "dropChance": 0.25
+        },
+        {
+          "rewardType": "item",
+          "itemId": "ashwood_blue",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.05
+        },
+        {
+          "rewardType": "item",
+          "itemId": "ashwood_purple",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.005
+        },
+        {
+          "rewardType": "item",
+          "itemId": "aeb_exchange_voucher",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.0002
+        }
+      ]
+    },
+    {
+      "lootPoolId": "gather_shadow_woods_iron",
+      "entries": [
+        {"rewardType":"item","itemId":"shadow_iron_white","quantityMin":1,"quantityMax":3,"dropChance":1},
+        {"rewardType":"item","itemId":"shadow_iron_green","quantityMin":1,"quantityMax":2,"dropChance":0.25},
+        {"rewardType":"item","itemId":"shadow_iron_blue","quantityMin":1,"quantityMax":1,"dropChance":0.05},
+        {"rewardType":"item","itemId":"shadow_iron_purple","quantityMin":1,"quantityMax":1,"dropChance":0.005},
+        {"rewardType":"item","itemId":"aeb_exchange_voucher","quantityMin":1,"quantityMax":1,"dropChance":0.0002}
+      ]
+    },
+    {
+      "lootPoolId": "gather_shadow_woods_gloomcap",
+      "entries": [
+        {"rewardType":"item","itemId":"gloomcap_spore_white","quantityMin":1,"quantityMax":3,"dropChance":1},
+        {"rewardType":"item","itemId":"gloomcap_spore_green","quantityMin":1,"quantityMax":2,"dropChance":0.25},
+        {"rewardType":"item","itemId":"gloomcap_spore_blue","quantityMin":1,"quantityMax":1,"dropChance":0.05},
+        {"rewardType":"item","itemId":"gloomcap_spore_purple","quantityMin":1,"quantityMax":1,"dropChance":0.005},
+        {"rewardType":"item","itemId":"aeb_exchange_voucher","quantityMin":1,"quantityMax":1,"dropChance":0.0002}
+      ]
+    },
+    {
+      "lootPoolId": "gather_shadow_woods_gloomstone",
+      "entries": [
+        {"rewardType":"item","itemId":"gloomstone_white","quantityMin":1,"quantityMax":3,"dropChance":1},
+        {"rewardType":"item","itemId":"gloomstone_green","quantityMin":1,"quantityMax":2,"dropChance":0.25},
+        {"rewardType":"item","itemId":"gloomstone_blue","quantityMin":1,"quantityMax":1,"dropChance":0.05},
+        {"rewardType":"item","itemId":"gloomstone_purple","quantityMin":1,"quantityMax":1,"dropChance":0.005},
+        {"rewardType":"item","itemId":"aeb_exchange_voucher","quantityMin":1,"quantityMax":1,"dropChance":0.0002}
       ]
     },
     {
@@ -127,6 +1207,13 @@
       "entries": [
         {
           "rewardType": "item",
+          "itemId": "boss_ticket_gloomwood",
+          "quantityMin": 1,
+          "quantityMax": 1,
+          "dropChance": 0.06
+        },
+        {
+          "rewardType": "item",
           "itemId": "aeon_shard",
           "quantityMin": 1,
           "quantityMax": 2,
@@ -134,7 +1221,7 @@
         },
         {
           "rewardType": "token",
-          "itemId": "GAME",
+          "itemId": "AEB",
           "quantityMin": 1,
           "quantityMax": 2,
           "dropChance": 0.2
@@ -146,12 +1233,12 @@
       "entries": [
         {
           "rewardType": "equipment",
-          "itemId": "nightglass_staff",
+          "itemId": "nightglass_staff_t15",
           "quantityMin": 1,
           "quantityMax": 1,
           "dropChance": 0.15,
           "rarity": 2,
-          "affixPoolId": "early_weapon_affixes"
+          "affixPoolId": "weapon_affixes"
         }
       ]
     },
@@ -160,16 +1247,16 @@
       "entries": [
         {
           "rewardType": "equipment",
-          "itemId": "nightglass_staff",
+          "itemId": "eclipseguard_staff_t20",
           "quantityMin": 1,
           "quantityMax": 1,
           "dropChance": 0.35,
           "rarity": 3,
-          "affixPoolId": "early_weapon_affixes"
+          "affixPoolId": "weapon_affixes"
         },
         {
           "rewardType": "token",
-          "itemId": "GAME",
+          "itemId": "AEB",
           "quantityMin": 2,
           "quantityMax": 4,
           "dropChance": 0.25

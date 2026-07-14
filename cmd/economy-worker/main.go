@@ -13,10 +13,14 @@ import (
 	"time"
 
 	"github.com/flenzero/aeon-backend/internal/platform/config"
+	"github.com/flenzero/aeon-backend/internal/platform/security"
 )
 
 func main() {
 	cfg := config.Load("economy-worker", "")
+	if err := cfg.ValidateStartup(); err != nil {
+		log.Fatal(err)
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -55,7 +59,17 @@ func postInternal(ctx context.Context, client *http.Client, cfg config.Config, p
 		return err.Error()
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-Internal-Key", cfg.InternalKey)
+	if strings.TrimSpace(cfg.ServiceID) != "" {
+		privateKey, err := security.ParseEd25519PrivateKey(cfg.ServicePrivateKey)
+		if err != nil {
+			return err.Error()
+		}
+		if err := security.SignServiceRequest(req, cfg.ServiceID, privateKey, time.Now().UTC(), security.RandomToken("req")); err != nil {
+			return err.Error()
+		}
+	} else {
+		req.Header.Set("X-Internal-Key", cfg.InternalKey)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return err.Error()

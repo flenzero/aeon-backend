@@ -3,6 +3,8 @@ package economy
 import (
 	"context"
 	"errors"
+	"fmt"
+	"hash/fnv"
 	"strings"
 	"time"
 
@@ -24,31 +26,48 @@ func NewService(cfg config.Config, st store.Repository) *Service {
 	return &Service{cfg: cfg, store: st, economyRules: economyRules, rulesErr: err}
 }
 
+func (s *Service) Ready(context.Context) error {
+	return s.rulesErr
+}
+
 func (s *Service) Snapshot(accountID, characterID int64) (store.EconomySnapshot, error) {
 	snapshot, err := s.store.EconomySnapshot(accountID, characterID)
 	if err != nil {
 		return store.EconomySnapshot{}, err
 	}
-	if s.economyRules != nil {
-		snapshot.BagSlots = s.economyRules.EffectiveBagSlots(snapshot.BagExpandCount)
-	}
-	return snapshot, nil
+	return s.resolveSnapshot(snapshot)
 }
 
 func (s *Service) WarehouseDeposit(req store.EconomyActionRequest) (store.EconomySnapshot, error) {
-	return s.store.WarehouseDeposit(req)
+	snapshot, err := s.store.WarehouseDeposit(req)
+	if err != nil {
+		return store.EconomySnapshot{}, err
+	}
+	return s.resolveSnapshot(snapshot)
 }
 
 func (s *Service) WarehouseWithdraw(req store.EconomyActionRequest) (store.EconomySnapshot, error) {
-	return s.store.WarehouseWithdraw(req)
+	snapshot, err := s.store.WarehouseWithdraw(req)
+	if err != nil {
+		return store.EconomySnapshot{}, err
+	}
+	return s.resolveSnapshot(snapshot)
 }
 
 func (s *Service) EquipItem(req store.EconomyActionRequest) (store.EconomySnapshot, error) {
-	return s.store.EquipItem(req)
+	snapshot, err := s.store.EquipItem(req)
+	if err != nil {
+		return store.EconomySnapshot{}, err
+	}
+	return s.resolveSnapshot(snapshot)
 }
 
 func (s *Service) UnequipItem(req store.EconomyActionRequest) (store.EconomySnapshot, error) {
-	return s.store.UnequipItem(req)
+	snapshot, err := s.store.UnequipItem(req)
+	if err != nil {
+		return store.EconomySnapshot{}, err
+	}
+	return s.resolveSnapshot(snapshot)
 }
 
 func (s *Service) EquipmentRepair(req store.EquipmentRepairRequest) (store.EquipmentRepairResult, error) {
@@ -56,7 +75,98 @@ func (s *Service) EquipmentRepair(req store.EquipmentRepairRequest) (store.Equip
 		return store.EquipmentRepairResult{}, s.rulesErr
 	}
 	req.Rules = s.economyRules.EquipmentRules()
-	return s.store.EquipmentRepair(req)
+	result, err := s.store.EquipmentRepair(req)
+	if err != nil {
+		return store.EquipmentRepairResult{}, err
+	}
+	result.Snapshot, err = s.resolveSnapshot(result.Snapshot)
+	if err != nil {
+		return store.EquipmentRepairResult{}, err
+	}
+	return result, nil
+}
+
+func (s *Service) EquipmentEnhance(opID string, accountID, characterID int64, equipmentUID string) (store.EquipmentEnhanceResult, error) {
+	if s.rulesErr != nil {
+		return store.EquipmentEnhanceResult{}, s.rulesErr
+	}
+	snapshot, err := s.store.EconomySnapshot(accountID, characterID)
+	if err != nil {
+		return store.EquipmentEnhanceResult{}, err
+	}
+	var equipment *store.EquipmentItem
+	for index := range snapshot.Equipment {
+		if snapshot.Equipment[index].EquipmentUID == strings.TrimSpace(equipmentUID) {
+			equipment = &snapshot.Equipment[index]
+			break
+		}
+	}
+	if equipment == nil {
+		return store.EquipmentEnhanceResult{}, store.ErrNotFound
+	}
+	if equipment.NFTContract != nil {
+		return store.EquipmentEnhanceResult{}, errors.New("nft-linked equipment cannot be enhanced")
+	}
+	gold, stoneID, stoneQuantity, err := s.economyRules.EnhancementRule(equipment.ItemID, equipment.Rarity, equipment.EnhanceLevel+1)
+	if err != nil {
+		return store.EquipmentEnhanceResult{}, err
+	}
+	result, err := s.store.EquipmentEnhance(store.EquipmentEnhanceRequest{
+		OpID: opID, AccountID: accountID, CharacterID: characterID, EquipmentUID: equipmentUID,
+		MaxLevel: s.economyRules.Equipment.Enhancement.MaxLevel, GoldCost: gold, StoneItemID: stoneID, StoneQuantity: stoneQuantity,
+	})
+	if err != nil {
+		return store.EquipmentEnhanceResult{}, err
+	}
+	result.Equipment, err = s.economyRules.ResolveEquipmentItem(result.Equipment)
+	if err != nil {
+		return store.EquipmentEnhanceResult{}, err
+	}
+	result.Snapshot, err = s.resolveSnapshot(result.Snapshot)
+	if err != nil {
+		return store.EquipmentEnhanceResult{}, err
+	}
+	return result, nil
+}
+
+func (s *Service) EquipmentNPCRecycle(opID string, accountID, characterID int64, equipmentUID string) (store.EquipmentNPCRecycleResult, error) {
+	if s.rulesErr != nil {
+		return store.EquipmentNPCRecycleResult{}, s.rulesErr
+	}
+	snapshot, err := s.store.EconomySnapshot(accountID, characterID)
+	if err != nil {
+		return store.EquipmentNPCRecycleResult{}, err
+	}
+	for _, equipment := range snapshot.Equipment {
+		if equipment.EquipmentUID != strings.TrimSpace(equipmentUID) {
+			continue
+		}
+		if equipment.NFTContract != nil {
+			return store.EquipmentNPCRecycleResult{}, errors.New("nft-linked equipment cannot be sold to an npc")
+		}
+		template, ok := s.economyRules.EquipmentTemplate(equipment.ItemID)
+		if !ok {
+			return store.EquipmentNPCRecycleResult{}, errors.New("only current equipment templates can be sold to an npc")
+		}
+		gold, ok := template.NPCRecycleGold[equipment.Rarity]
+		if !ok {
+			return store.EquipmentNPCRecycleResult{}, errors.New("npc recycle value is not configured")
+		}
+		result, err := s.store.EquipmentNPCRecycle(store.EquipmentNPCRecycleRequest{OpID: opID, AccountID: accountID, CharacterID: characterID, EquipmentUID: equipmentUID, GoldCredit: gold})
+		if err != nil {
+			return store.EquipmentNPCRecycleResult{}, err
+		}
+		result.Snapshot, err = s.resolveSnapshot(result.Snapshot)
+		if err != nil {
+			return store.EquipmentNPCRecycleResult{}, err
+		}
+		return result, nil
+	}
+	return store.EquipmentNPCRecycleResult{}, store.ErrNotFound
+}
+
+func (s *Service) PurgeExpiredNPCRecycledEquipment(now time.Time, limit int) (int64, error) {
+	return s.store.PurgeExpiredNPCRecycledEquipment(now, limit)
 }
 
 func (s *Service) RequestNFTMint(req store.NFTMintRequestInput) (store.NFTMintRequestResult, error) {
@@ -64,15 +174,42 @@ func (s *Service) RequestNFTMint(req store.NFTMintRequestInput) (store.NFTMintRe
 		return store.NFTMintRequestResult{}, s.rulesErr
 	}
 	req.Rules = s.economyRules.NFTRules()
-	return s.store.RequestNFTMint(req)
+	result, err := s.store.RequestNFTMint(req)
+	if err != nil {
+		return store.NFTMintRequestResult{}, err
+	}
+	result.Snapshot, err = s.resolveSnapshot(result.Snapshot)
+	if err != nil {
+		return store.NFTMintRequestResult{}, err
+	}
+	return result, nil
 }
 
 func (s *Service) ConfirmNFTMint(req store.NFTMintConfirmInput) (store.NFTMintRequestResult, error) {
-	return s.store.ConfirmNFTMint(req)
+	if s.cfg.StubMode == config.StubDisabled {
+		return store.NFTMintRequestResult{}, errors.New("Metaplex Core mint verification adapter is not configured")
+	}
+	result, err := s.store.ConfirmNFTMint(req)
+	if err != nil {
+		return store.NFTMintRequestResult{}, err
+	}
+	result.Snapshot, err = s.resolveSnapshot(result.Snapshot)
+	if err != nil {
+		return store.NFTMintRequestResult{}, err
+	}
+	return result, nil
 }
 
 func (s *Service) CancelNFTMint(opID string, accountID, requestID int64) (store.NFTMintRequestResult, error) {
-	return s.store.CancelNFTMint(opID, accountID, requestID)
+	result, err := s.store.CancelNFTMint(opID, accountID, requestID)
+	if err != nil {
+		return store.NFTMintRequestResult{}, err
+	}
+	result.Snapshot, err = s.resolveSnapshot(result.Snapshot)
+	if err != nil {
+		return store.NFTMintRequestResult{}, err
+	}
+	return result, nil
 }
 
 func (s *Service) ListNFTAssets(accountID int64) ([]store.NFTAsset, error) {
@@ -103,19 +240,35 @@ func (s *Service) DungeonFinish(req store.DungeonFinishRequest) (store.DungeonRe
 	eq := s.economyRules.EquipmentRules()
 	req.EquipmentWearPoints = eq.DungeonWearPoints
 	req.DefaultMaxDurability = eq.DefaultMaxDurability
-	return s.store.DungeonFinish(req)
+	result, err := s.store.DungeonFinish(req)
+	if err != nil {
+		return store.DungeonResult{}, err
+	}
+	return s.resolveDungeonResult(result)
 }
 
 func (s *Service) LootClaim(req store.LootActionRequest) (store.EconomySnapshot, error) {
-	return s.store.LootClaim(req)
+	snapshot, err := s.store.LootClaim(req)
+	if err != nil {
+		return store.EconomySnapshot{}, err
+	}
+	return s.resolveSnapshot(snapshot)
 }
 
 func (s *Service) LootClaimAll(req store.LootActionRequest) (store.EconomySnapshot, error) {
-	return s.store.LootClaimAll(req)
+	snapshot, err := s.store.LootClaimAll(req)
+	if err != nil {
+		return store.EconomySnapshot{}, err
+	}
+	return s.resolveSnapshot(snapshot)
 }
 
 func (s *Service) LootDiscard(req store.LootActionRequest) (store.EconomySnapshot, error) {
-	return s.store.LootDiscard(req)
+	snapshot, err := s.store.LootDiscard(req)
+	if err != nil {
+		return store.EconomySnapshot{}, err
+	}
+	return s.resolveSnapshot(snapshot)
 }
 
 func (s *Service) GatheringSettle(req store.ActivitySettlementRequest) (store.ActivitySettlementResult, error) {
@@ -128,7 +281,15 @@ func (s *Service) GatheringSettle(req store.ActivitySettlementRequest) (store.Ac
 		return store.ActivitySettlementResult{}, err
 	}
 	req.RewardPlan = plan
-	return s.store.GatheringSettle(req)
+	result, err := s.store.GatheringSettle(req)
+	if err != nil {
+		return store.ActivitySettlementResult{}, err
+	}
+	result.Snapshot, err = s.resolveSnapshot(result.Snapshot)
+	if err != nil {
+		return store.ActivitySettlementResult{}, err
+	}
+	return result, nil
 }
 
 func (s *Service) FarmingHarvest(req store.ActivitySettlementRequest) (store.ActivitySettlementResult, error) {
@@ -141,7 +302,15 @@ func (s *Service) FarmingHarvest(req store.ActivitySettlementRequest) (store.Act
 		return store.ActivitySettlementResult{}, err
 	}
 	req.RewardPlan = plan
-	return s.store.FarmingHarvest(req)
+	result, err := s.store.FarmingHarvest(req)
+	if err != nil {
+		return store.ActivitySettlementResult{}, err
+	}
+	result.Snapshot, err = s.resolveSnapshot(result.Snapshot)
+	if err != nil {
+		return store.ActivitySettlementResult{}, err
+	}
+	return result, nil
 }
 
 func (s *Service) BossContribute(req store.BossContributeRequest) (store.BossContributeResult, error) {
@@ -167,7 +336,15 @@ func (s *Service) BossSettle(req store.BossSettleRequest) (store.BossSettleResul
 	eq := s.economyRules.EquipmentRules()
 	req.EquipmentWearPoints = eq.BossWearPoints
 	req.DefaultMaxDurability = eq.DefaultMaxDurability
-	return s.store.BossSettle(req)
+	result, err := s.store.BossSettle(req)
+	if err != nil {
+		return store.BossSettleResult{}, err
+	}
+	result.Snapshot, err = s.resolveSnapshot(result.Snapshot)
+	if err != nil {
+		return store.BossSettleResult{}, err
+	}
+	return result, nil
 }
 
 func (s *Service) BossOpenEvent(req store.BossOpenEventRequest) (store.BossEvent, error) {
@@ -212,7 +389,11 @@ func (s *Service) InventoryOrganize(req store.EconomyActionRequest) (store.Econo
 		}
 		bagSlots = s.economyRules.EffectiveBagSlots(snap.BagExpandCount)
 	}
-	return s.store.InventoryOrganize(req, bagSlots)
+	snapshot, err := s.store.InventoryOrganize(req, bagSlots)
+	if err != nil {
+		return store.EconomySnapshot{}, err
+	}
+	return s.resolveSnapshot(snapshot)
 }
 
 func (s *Service) WarehouseOrganize(req store.EconomyActionRequest) (store.EconomySnapshot, error) {
@@ -220,11 +401,19 @@ func (s *Service) WarehouseOrganize(req store.EconomyActionRequest) (store.Econo
 	if s.economyRules != nil {
 		warehouseSlots = s.economyRules.WarehouseSlots()
 	}
-	return s.store.WarehouseOrganize(req, warehouseSlots)
+	snapshot, err := s.store.WarehouseOrganize(req, warehouseSlots)
+	if err != nil {
+		return store.EconomySnapshot{}, err
+	}
+	return s.resolveSnapshot(snapshot)
 }
 
 func (s *Service) InventoryDiscard(req store.InventoryDiscardRequest) (store.EconomySnapshot, error) {
-	return s.store.InventoryDiscard(req)
+	snapshot, err := s.store.InventoryDiscard(req)
+	if err != nil {
+		return store.EconomySnapshot{}, err
+	}
+	return s.resolveSnapshot(snapshot)
 }
 
 func (s *Service) Synthesize(req store.SynthesizeRequest) (store.EconomySnapshot, error) {
@@ -243,7 +432,42 @@ func (s *Service) Synthesize(req store.SynthesizeRequest) (store.EconomySnapshot
 	for i, input := range inputs {
 		req.Inputs[i] = store.MaterialCost{ItemID: input.ItemID, Quantity: input.Quantity}
 	}
-	return s.store.Synthesize(req)
+	snapshot, err := s.store.Synthesize(req)
+	if err != nil {
+		return store.EconomySnapshot{}, err
+	}
+	return s.resolveSnapshot(snapshot)
+}
+
+func (s *Service) resolveSnapshot(snapshot store.EconomySnapshot) (store.EconomySnapshot, error) {
+	if s.economyRules == nil {
+		return snapshot, s.rulesErr
+	}
+	snapshot.BagSlots = s.economyRules.EffectiveBagSlots(snapshot.BagExpandCount)
+	for index, equipment := range snapshot.Equipment {
+		resolved, err := s.economyRules.ResolveEquipmentItem(equipment)
+		if err != nil {
+			return store.EconomySnapshot{}, err
+		}
+		snapshot.Equipment[index] = resolved
+	}
+	return snapshot, nil
+}
+
+func (s *Service) resolveDungeonResult(result store.DungeonResult) (store.DungeonResult, error) {
+	var err error
+	result.Snapshot, err = s.resolveSnapshot(result.Snapshot)
+	if err != nil {
+		return store.DungeonResult{}, err
+	}
+	for index, equipment := range result.Rewards.EquipmentItems {
+		resolved, err := s.economyRules.ResolveEquipmentItem(equipment)
+		if err != nil {
+			return store.DungeonResult{}, err
+		}
+		result.Rewards.EquipmentItems[index] = resolved
+	}
+	return result, nil
 }
 
 func (s *Service) marketplaceRules() store.MarketplaceRules {
@@ -325,6 +549,161 @@ func (s *Service) CreateTradingLicensePayment(req store.GrowthPaymentRequest) (s
 	}
 	req.Rules = s.growthPaymentRules()
 	return s.store.CreateTradingLicensePayment(req)
+}
+
+func (s *Service) CreateLotteryPayment(opID string, accountID, characterID int64, count int) (store.LotteryPaymentResult, error) {
+	if s.rulesErr != nil {
+		return store.LotteryPaymentResult{}, s.rulesErr
+	}
+	snapshot, err := s.store.EconomySnapshot(accountID, characterID)
+	if err != nil {
+		return store.LotteryPaymentResult{}, err
+	}
+	plan, err := s.economyRules.LotteryPlan(opID, characterID, snapshot.Level, count)
+	if err != nil {
+		return store.LotteryPaymentResult{}, err
+	}
+	lottery := s.economyRules.Lottery
+	result, err := s.store.CreateLotteryPayment(store.LotteryPaymentRequest{
+		OpID: opID, AccountID: accountID, CharacterID: characterID, Count: count,
+		Amount: lottery.PriceAEB * int64(count), ReceiverWallet: s.cfg.SolanaDepositWallet,
+		ConfigSnapshot: map[string]any{"priceAeb": lottery.PriceAEB, "count": count, "categoryWeights": lottery.CategoryWeight, "equipmentRarityWeights": lottery.EquipmentRarityWeight}, RewardPlan: plan,
+	})
+	if err != nil {
+		return store.LotteryPaymentResult{}, err
+	}
+	return result, nil
+}
+
+func (s *Service) BountyBoard(accountID, characterID int64) (store.BountyBoard, error) {
+	if s.rulesErr != nil {
+		return store.BountyBoard{}, s.rulesErr
+	}
+	return s.store.BountyBoard(store.BountyBoardRequest{AccountID: accountID, CharacterID: characterID, Plans: s.bountyPlans("bounty-board", characterID, false)})
+}
+
+func (s *Service) UnlockBountyGoldSlot(opID string, accountID, characterID int64) (store.BountyBoard, error) {
+	if s.rulesErr != nil {
+		return store.BountyBoard{}, s.rulesErr
+	}
+	var cost int64
+	for _, slot := range s.economyRules.Bounties.Slots {
+		if slot.SlotIndex == 2 {
+			cost = slot.GoldCost
+		}
+	}
+	return s.store.UnlockBountyGoldSlot(store.BountyGoldUnlockRequest{OpID: opID, AccountID: accountID, CharacterID: characterID, GoldCost: cost, Plans: s.bountyPlans(opID, characterID, false)})
+}
+
+func (s *Service) CreateBountySlotPayment(opID string, accountID, characterID int64, slotIndex int) (store.BountyPaymentResult, error) {
+	if s.rulesErr != nil {
+		return store.BountyPaymentResult{}, s.rulesErr
+	}
+	var price int64
+	for _, slot := range s.economyRules.Bounties.Slots {
+		if slot.SlotIndex == slotIndex {
+			price = slot.AEBPrice
+		}
+	}
+	return s.store.CreateBountyPayment(store.BountyPaymentRequest{OpID: opID, AccountID: accountID, CharacterID: characterID, Purpose: store.PaymentPurposeBountySlotUnlock, SlotIndex: slotIndex, Amount: price, ReceiverWallet: s.cfg.SolanaDepositWallet})
+}
+
+func (s *Service) RefreshBounty(opID string, accountID, characterID int64, mode string) (store.BountyBoard, *store.PaymentOrder, error) {
+	if s.rulesErr != nil {
+		return store.BountyBoard{}, nil, s.rulesErr
+	}
+	board, err := s.BountyBoard(accountID, characterID)
+	if err != nil {
+		return store.BountyBoard{}, nil, err
+	}
+	plans := map[int]store.BountyTaskPlan{}
+	for _, slot := range board.Slots {
+		if slot.Task != nil && slot.Task.Status == "ACTIVE" && slot.Task.Difficulty == "normal" {
+			plans[slot.SlotIndex] = s.bountyPlan(opID, characterID, slot.SlotIndex, false)
+		}
+	}
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	if mode == "premium" {
+		if len(plans) == 0 {
+			return store.BountyBoard{}, nil, errors.New("no normal active bounty task can be refreshed")
+		}
+		first := 6
+		for slot := range plans {
+			if slot < first {
+				first = slot
+			}
+		}
+		plans[first] = s.bountyPlan(opID, characterID, first, true)
+		result, err := s.store.CreateBountyPayment(store.BountyPaymentRequest{OpID: opID, AccountID: accountID, CharacterID: characterID, Purpose: store.PaymentPurposeBountyPremiumRefresh, Amount: s.economyRules.Bounties.Refresh.PremiumAEBPrice, ReceiverWallet: s.cfg.SolanaDepositWallet, RefreshPlans: plans})
+		return store.BountyBoard{}, &result.Order, err
+	}
+	if mode != "free" && mode != "gold" {
+		return store.BountyBoard{}, nil, errors.New("refresh mode must be free, gold, or premium")
+	}
+	result, err := s.store.RefreshBounty(store.BountyRefreshRequest{OpID: opID, AccountID: accountID, CharacterID: characterID, Mode: mode, GoldCost: s.economyRules.Bounties.Refresh.GoldCost, CooldownSeconds: int64(s.economyRules.Bounties.Refresh.FreeCooldownSeconds), Plans: plans})
+	return result, nil, err
+}
+
+func (s *Service) SubmitBountyEquipment(opID string, accountID, characterID int64, slotIndex int, equipmentUID string) (store.BountyTask, error) {
+	return s.store.SubmitBountyEquipment(store.BountyEquipmentSubmitRequest{OpID: opID, AccountID: accountID, CharacterID: characterID, SlotIndex: slotIndex, EquipmentUID: equipmentUID})
+}
+func (s *Service) ClaimBounty(opID string, accountID, characterID int64, slotIndex int) (store.BountyTask, error) {
+	return s.store.ClaimBounty(store.BountyClaimRequest{OpID: opID, AccountID: accountID, CharacterID: characterID, SlotIndex: slotIndex})
+}
+func (s *Service) ProgressBountyCombat(opID string, accountID, characterID int64, dungeonRunID, serverID string) ([]store.BountyTask, error) {
+	return s.store.ProgressBountyCombat(store.BountyCombatProgressRequest{OpID: opID, AccountID: accountID, CharacterID: characterID, DungeonRunID: dungeonRunID, ServerID: serverID})
+}
+
+func (s *Service) DrawBountyBadge(opID string, accountID, characterID int64, badge string) (store.BountyBadgeDrawResult, error) {
+	if s.rulesErr != nil {
+		return store.BountyBadgeDrawResult{}, s.rulesErr
+	}
+	lottery, ok := s.economyRules.Bounties.BadgeLottery[strings.ToLower(strings.TrimSpace(badge))]
+	if !ok {
+		return store.BountyBadgeDrawResult{}, errors.New("unknown bounty badge")
+	}
+	if len(lottery.Rewards) == 0 {
+		return store.BountyBadgeDrawResult{}, errors.New("empty bounty badge lottery")
+	}
+	h := fnv.New64a()
+	_, _ = h.Write([]byte(fmt.Sprintf("%s:%d:%d", opID, accountID, characterID)))
+	pick := int(h.Sum64() % uint64(bountyWeight(lottery.Rewards)))
+	chosen := lottery.Rewards[len(lottery.Rewards)-1]
+	for _, reward := range lottery.Rewards {
+		if pick < reward.Weight {
+			chosen = reward
+			break
+		}
+		pick -= reward.Weight
+	}
+	span := chosen.Max - chosen.Min + 1
+	amount := chosen.Min
+	if span > 1 {
+		amount += int64((h.Sum64() >> 16) % uint64(span))
+	}
+	return s.store.DrawBountyBadge(store.BountyBadgeDrawRequest{OpID: opID, AccountID: accountID, CharacterID: characterID, BadgeItemID: lottery.CostItemID, RewardType: chosen.Type, RewardItemID: chosen.ItemID, Amount: amount})
+}
+
+func bountyWeight(rows []rules.BountyBadgeReward) int {
+	total := 0
+	for _, row := range rows {
+		total += row.Weight
+	}
+	return total
+}
+func (s *Service) bountyPlans(opID string, characterID int64, premium bool) map[int]store.BountyTaskPlan {
+	out := map[int]store.BountyTaskPlan{}
+	for slot := 1; slot <= 5; slot++ {
+		out[slot] = s.bountyPlan(opID, characterID, slot, premium)
+	}
+	return out
+}
+func (s *Service) bountyPlan(opID string, characterID int64, slot int, premium bool) store.BountyTaskPlan {
+	plan, err := s.economyRules.BountyTaskPlan(opID, characterID, slot, premium)
+	if err != nil {
+		return store.BountyTaskPlan{}
+	}
+	return store.BountyTaskPlan{TemplateID: plan.TemplateID, Type: plan.Type, Difficulty: plan.Difficulty, ItemID: plan.ItemID, MinRarity: plan.MinRarity, RequiredQuantity: plan.Required, RewardItemID: plan.RewardItemID, RewardQuantity: plan.RewardQuantity}
 }
 
 func (s *Service) ConfirmPaymentOrder(orderID, reason string) (store.PaymentOrder, error) {
@@ -421,6 +800,9 @@ func (s *Service) GrantLocked(accountID, amount int64, source, ref string, coold
 }
 
 func (s *Service) RequestWithdrawal(accountID, amount int64, wallet string) (store.Withdrawal, error) {
+	if amount <= 0 {
+		return store.Withdrawal{}, errors.New("amount must be positive")
+	}
 	wallet = strings.TrimSpace(wallet)
 	if wallet == "" {
 		account, ok := s.store.Account(accountID)

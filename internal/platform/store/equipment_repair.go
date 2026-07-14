@@ -88,7 +88,7 @@ func (s *PostgresStore) EquipmentRepair(req EquipmentRepairRequest) (EquipmentRe
 	if uid == "" {
 		return EquipmentRepairResult{}, errors.New("equipmentUid is required")
 	}
-	return runIdempotentAction(s, "equipment_repair", req.OpID, req.AccountID, req.CharacterID, func(ctx context.Context, tx pgx.Tx) (EquipmentRepairResult, error) {
+	return runIdempotentAction(s, "equipment_repair", req.OpID, req.AccountID, req.CharacterID, req, func(ctx context.Context, tx pgx.Tx) (EquipmentRepairResult, error) {
 		if err := s.lockCharacter(ctx, tx, req.AccountID, req.CharacterID); err != nil {
 			return EquipmentRepairResult{}, err
 		}

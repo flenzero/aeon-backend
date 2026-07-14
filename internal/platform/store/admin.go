@@ -85,6 +85,177 @@ type AdminListFilter struct {
 	Offset    int
 }
 
+type AdminPaymentTrace struct {
+	Order  PaymentOrder  `json:"order"`
+	Ledger []LedgerEntry `json:"ledger"`
+}
+
+type AdminCharacterListFilter struct {
+	Keyword           string
+	AccountID         int64
+	Wallet            string
+	MinLevel          int
+	MaxLevel          int
+	HasTradingLicense *bool
+	Status            string
+	OnlineOnly        bool
+	ServerID          string
+	Limit             int
+	Offset            int
+}
+
+type AdminCharacterSummary struct {
+	CharacterID       int64     `json:"characterId"`
+	AccountID         int64     `json:"accountId"`
+	Name              string    `json:"name"`
+	Level             int       `json:"level"`
+	Exp               int64     `json:"exp"`
+	WalletAddress     string    `json:"walletAddress"`
+	AccountStatus     string    `json:"accountStatus"`
+	RiskLevel         int       `json:"riskLevel"`
+	HasTradingLicense bool      `json:"hasTradingLicense"`
+	LastLoginAt       time.Time `json:"lastLoginAt"`
+	Online            bool      `json:"online"`
+	ServerID          string    `json:"serverId,omitempty"`
+	CreatedAt         time.Time `json:"createdAt"`
+}
+
+type AdminCharacterCore struct {
+	CharacterID           int64     `json:"characterId"`
+	AccountID             int64     `json:"accountId"`
+	Name                  string    `json:"name"`
+	Level                 int       `json:"level"`
+	Exp                   int64     `json:"exp"`
+	Stamina               int       `json:"stamina"`
+	BagSlots              int       `json:"bagSlots"`
+	BagExpandCount        int       `json:"bagExpandCount"`
+	HighestClearedChapter int       `json:"highestClearedChapter"`
+	HighestClearedFloor   int       `json:"highestClearedFloor"`
+	DungeonClearCount     int64     `json:"dungeonClearCount"`
+	CreatedAt             time.Time `json:"createdAt"`
+}
+
+type AdminOnlineStatus struct {
+	Online       bool       `json:"online"`
+	ServerID     string     `json:"serverId,omitempty"`
+	ConnectionID string     `json:"connectionId,omitempty"`
+	SessionID    string     `json:"sessionId,omitempty"`
+	LastSeenAt   *time.Time `json:"lastSeenAt,omitempty"`
+}
+
+type AdminCharacterDetail struct {
+	Character AdminCharacterCore `json:"character"`
+	Account   AdminAccountDetail `json:"account"`
+	Economy   EconomySnapshot    `json:"economy"`
+	Online    AdminOnlineStatus  `json:"online"`
+}
+
+type AdminCharacterTimelineFilter struct {
+	Types  []string
+	Limit  int
+	Offset int
+}
+
+type AdminCharacterTimelineItem struct {
+	Type      string         `json:"type"`
+	ID        string         `json:"id"`
+	Title     string         `json:"title"`
+	Detail    string         `json:"detail,omitempty"`
+	Amount    int64          `json:"amount,omitempty"`
+	Ref       string         `json:"ref,omitempty"`
+	Severity  int            `json:"severity,omitempty"`
+	CreatedAt time.Time      `json:"createdAt"`
+	Raw       map[string]any `json:"raw,omitempty"`
+}
+
+type AdminCharacterTimelinePage struct {
+	Items  []AdminCharacterTimelineItem `json:"items"`
+	Count  int                          `json:"count"`
+	Total  int                          `json:"total"`
+	Limit  int                          `json:"limit"`
+	Offset int                          `json:"offset"`
+}
+
+type AdminEquipmentOwner struct {
+	AccountID     int64  `json:"accountId"`
+	CharacterID   int64  `json:"characterId,omitempty"`
+	CharacterName string `json:"characterName,omitempty"`
+	WalletAddress string `json:"walletAddress"`
+	AccountStatus string `json:"accountStatus"`
+}
+
+type AdminEquipmentNFTDetail struct {
+	AssetID       int64      `json:"assetId,omitempty"`
+	Status        string     `json:"status,omitempty"`
+	MintAddress   string     `json:"mintAddress,omitempty"`
+	MetadataURI   string     `json:"metadataUri,omitempty"`
+	RequestID     int64      `json:"requestId,omitempty"`
+	RequestStatus string     `json:"requestStatus,omitempty"`
+	TxSignature   string     `json:"txSignature,omitempty"`
+	CreatedAt     *time.Time `json:"createdAt,omitempty"`
+	MintedAt      *time.Time `json:"mintedAt,omitempty"`
+	SubmittedAt   *time.Time `json:"submittedAt,omitempty"`
+	ConfirmedAt   *time.Time `json:"confirmedAt,omitempty"`
+}
+
+type AdminEquipmentDetail struct {
+	Equipment   EquipmentItem            `json:"equipment"`
+	Owner       AdminEquipmentOwner      `json:"owner"`
+	NFT         *AdminEquipmentNFTDetail `json:"nft,omitempty"`
+	Marketplace *MarketplaceListing      `json:"marketplace,omitempty"`
+}
+
+type AdminCompensationPreviewDetail struct {
+	PreviewID   string                   `json:"previewId"`
+	Status      string                   `json:"status"`
+	TargetCount int                      `json:"targetCount"`
+	ExpiresAt   time.Time                `json:"expiresAt"`
+	Filters     AdminCompensationFilter  `json:"filters"`
+	Rewards     AdminCompensationRewards `json:"rewards"`
+	CreatedAt   time.Time                `json:"createdAt"`
+	CommittedAt *time.Time               `json:"committedAt,omitempty"`
+}
+
+type AdminCompensationTargetPage struct {
+	Items  []AdminCompensationTarget `json:"items"`
+	Count  int                       `json:"count"`
+	Total  int                       `json:"total"`
+	Limit  int                       `json:"limit"`
+	Offset int                       `json:"offset"`
+}
+
+// AdminOperation stores the successful response of a super-admin write.  A
+// repeated opId returns this exact response instead of applying the mutation
+// and writing another audit record.
+type AdminOperation struct {
+	OpID      string          `json:"opId"`
+	AdminID   string          `json:"adminId"`
+	Action    string          `json:"action"`
+	Target    string          `json:"target"`
+	Response  json.RawMessage `json:"-"`
+	CreatedAt time.Time       `json:"createdAt"`
+}
+
+// AdminRewardGrant is the Aeonblight-native replacement for a generic ops
+// reward: Gold belongs to a Character while AEB belongs to its Account.
+// Items and Equipment are placed into the Loot Tray so no existing inventory
+// capacity is displaced by an administrator action.
+type AdminRewardGrant struct {
+	OpID            string
+	AdminID         string
+	CharacterID     int64
+	Reason          string
+	Gold            int64
+	WithdrawableAEB int64
+	LockedAEB       int64
+	Items           []DungeonRewardGrant
+}
+
+type AdminRewardGrantResult struct {
+	Snapshot EconomySnapshot       `json:"snapshot"`
+	Items    appliedDungeonRewards `json:"items"`
+}
+
 func clampAdminLimit(limit int) int {
 	if limit <= 0 {
 		return 50
@@ -93,6 +264,172 @@ func clampAdminLimit(limit int) int {
 		return 200
 	}
 	return limit
+}
+
+func (s *PostgresStore) AdminOperation(opID string) (AdminOperation, error) {
+	var row AdminOperation
+	err := s.pool.QueryRow(context.Background(), `
+		SELECT op_id, admin_id, action, target, response, created_at
+		FROM admin_operation_logs
+		WHERE op_id = $1
+	`, strings.TrimSpace(opID)).Scan(&row.OpID, &row.AdminID, &row.Action, &row.Target, &row.Response, &row.CreatedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return AdminOperation{}, ErrNotFound
+	}
+	return row, err
+}
+
+func (s *PostgresStore) SaveAdminOperation(in AdminOperation) (AdminOperation, error) {
+	if strings.TrimSpace(in.OpID) == "" {
+		return AdminOperation{}, errors.New("opId is required")
+	}
+	if len(in.Response) == 0 || !json.Valid(in.Response) {
+		return AdminOperation{}, errors.New("admin operation response is invalid")
+	}
+	var row AdminOperation
+	err := s.pool.QueryRow(context.Background(), `
+		INSERT INTO admin_operation_logs (op_id, admin_id, action, target, response)
+		VALUES ($1, $2, $3, $4, $5::jsonb)
+		ON CONFLICT (op_id) DO NOTHING
+		RETURNING op_id, admin_id, action, target, response, created_at
+	`, strings.TrimSpace(in.OpID), strings.TrimSpace(in.AdminID), strings.TrimSpace(in.Action), strings.TrimSpace(in.Target), in.Response).Scan(
+		&row.OpID, &row.AdminID, &row.Action, &row.Target, &row.Response, &row.CreatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return s.AdminOperation(in.OpID)
+	}
+	return row, err
+}
+
+func (s *PostgresStore) AdminGrantRewards(req AdminRewardGrant) (AdminRewardGrantResult, error) {
+	if req.CharacterID <= 0 || strings.TrimSpace(req.AdminID) == "" || strings.TrimSpace(req.Reason) == "" {
+		return AdminRewardGrantResult{}, errors.New("characterId, adminId, and reason are required")
+	}
+	if req.Gold < 0 || req.WithdrawableAEB < 0 || req.LockedAEB < 0 {
+		return AdminRewardGrantResult{}, errors.New("reward amounts must be non-negative")
+	}
+	if req.Gold == 0 && req.WithdrawableAEB == 0 && req.LockedAEB == 0 && len(req.Items) == 0 {
+		return AdminRewardGrantResult{}, errors.New("at least one reward is required")
+	}
+	var accountID int64
+	err := s.pool.QueryRow(context.Background(), `
+		SELECT account_id FROM characters WHERE id = $1 AND is_deleted = FALSE
+	`, req.CharacterID).Scan(&accountID)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return AdminRewardGrantResult{}, ErrNotFound
+	}
+	if err != nil {
+		return AdminRewardGrantResult{}, err
+	}
+	return runIdempotentAction(s, "admin_reward_grant", req.OpID, accountID, req.CharacterID, req, func(ctx context.Context, tx pgx.Tx) (AdminRewardGrantResult, error) {
+		if err := s.lockCharacter(ctx, tx, accountID, req.CharacterID); err != nil {
+			return AdminRewardGrantResult{}, err
+		}
+		if req.Gold > 0 {
+			if _, err := tx.Exec(ctx, `INSERT INTO character_wallets (character_id) VALUES ($1) ON CONFLICT (character_id) DO NOTHING`, req.CharacterID); err != nil {
+				return AdminRewardGrantResult{}, err
+			}
+			if _, err := tx.Exec(ctx, `UPDATE character_wallets SET gold = gold + $2, updated_at = NOW() WHERE character_id = $1`, req.CharacterID, req.Gold); err != nil {
+				return AdminRewardGrantResult{}, err
+			}
+			if err := s.insertEconomyLedger(ctx, tx, accountID, req.CharacterID, "ADMIN_GRANT_GOLD", "admin:"+req.OpID, req.Gold, req.OpID); err != nil {
+				return AdminRewardGrantResult{}, err
+			}
+		}
+		if req.WithdrawableAEB > 0 || req.LockedAEB > 0 {
+			if _, err := tx.Exec(ctx, `INSERT INTO account_tokens (account_id) VALUES ($1) ON CONFLICT (account_id) DO NOTHING`, accountID); err != nil {
+				return AdminRewardGrantResult{}, err
+			}
+			if _, err := tx.Exec(ctx, `
+				UPDATE account_tokens
+				SET token_balance = token_balance + $2 + $3,
+					withdrawable_balance = withdrawable_balance + $2,
+					locked_balance = locked_balance + $3,
+					updated_at = NOW()
+				WHERE account_id = $1
+			`, accountID, req.WithdrawableAEB, req.LockedAEB); err != nil {
+				return AdminRewardGrantResult{}, err
+			}
+			if req.WithdrawableAEB > 0 {
+				if err := s.insertEconomyLedger(ctx, tx, accountID, req.CharacterID, "ADMIN_GRANT_AEB_WITHDRAWABLE", "admin:"+req.OpID, req.WithdrawableAEB, req.OpID); err != nil {
+					return AdminRewardGrantResult{}, err
+				}
+			}
+			if req.LockedAEB > 0 {
+				if err := s.insertEconomyLedger(ctx, tx, accountID, req.CharacterID, "ADMIN_GRANT_AEB_LOCKED", "admin:"+req.OpID, req.LockedAEB, req.OpID); err != nil {
+					return AdminRewardGrantResult{}, err
+				}
+			}
+		}
+		items, err := s.applyTrayRewards(ctx, tx, accountID, req.CharacterID, req.OpID, req.OpID, "admin_grant", "admin_grant", DungeonRewardPlan{Items: req.Items})
+		if err != nil {
+			return AdminRewardGrantResult{}, err
+		}
+		if len(req.Items) > 0 {
+			if err := s.insertEconomyLedger(ctx, tx, accountID, req.CharacterID, "ADMIN_GRANT_ITEMS", "admin:"+req.OpID, int64(len(req.Items)), req.OpID); err != nil {
+				return AdminRewardGrantResult{}, err
+			}
+		}
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO admin_audit_logs (admin_id, action, target_type, target_id, reason)
+			VALUES ($1, 'admin_reward_grant', 'character', $2, $3)
+		`, req.AdminID, fmt.Sprint(req.CharacterID), req.Reason); err != nil {
+			return AdminRewardGrantResult{}, err
+		}
+		snapshot, err := s.economySnapshot(ctx, tx, accountID, req.CharacterID)
+		if err != nil {
+			return AdminRewardGrantResult{}, err
+		}
+		return AdminRewardGrantResult{Snapshot: snapshot, Items: items}, nil
+	})
+}
+
+func (s *PostgresStore) AdminCharacterLevel(characterID int64) (int, error) {
+	var level int
+	err := s.pool.QueryRow(context.Background(), `SELECT level FROM characters WHERE id = $1 AND is_deleted = FALSE`, characterID).Scan(&level)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return 0, ErrNotFound
+	}
+	return level, err
+}
+
+func (s *PostgresStore) AdminPaymentTrace(orderID string) (AdminPaymentTrace, error) {
+	var out AdminPaymentTrace
+	var characterID *int64
+	var receiver, signature *string
+	err := s.pool.QueryRow(context.Background(), `
+		SELECT id::text,account_id,character_id,purpose,pay_asset,amount::bigint,receiver_wallet,status,tx_signature,created_at,expires_at,submitted_at,confirmed_at,fulfilled_at
+		FROM economy_payment_orders WHERE id=$1::uuid
+	`, strings.TrimSpace(orderID)).Scan(&out.Order.ID, &out.Order.AccountID, &characterID, &out.Order.Purpose, &out.Order.PayAsset, &out.Order.Amount, &receiver, &out.Order.Status, &signature, &out.Order.CreatedAt, &out.Order.ExpiresAt, &out.Order.SubmittedAt, &out.Order.ConfirmedAt, &out.Order.FulfilledAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return AdminPaymentTrace{}, ErrNotFound
+	}
+	if err != nil {
+		return AdminPaymentTrace{}, err
+	}
+	if characterID != nil {
+		out.Order.CharacterID = *characterID
+	}
+	if receiver != nil {
+		out.Order.ReceiverWallet = *receiver
+	}
+	if signature != nil {
+		out.Order.TxSignature = *signature
+	}
+	rows, err := s.pool.Query(context.Background(), `SELECT id,COALESCE(account_id,0),kind,COALESCE(amount::bigint,0),COALESCE(ref_id,''),COALESCE(reason,''),created_at FROM economy_ledger WHERE ref_id=$1 ORDER BY id`, out.Order.ID)
+	if err != nil {
+		return AdminPaymentTrace{}, err
+	}
+	defer rows.Close()
+	out.Ledger = []LedgerEntry{}
+	for rows.Next() {
+		var row LedgerEntry
+		if err := rows.Scan(&row.ID, &row.AccountID, &row.Kind, &row.Amount, &row.Ref, &row.Detail, &row.CreatedAt); err != nil {
+			return AdminPaymentTrace{}, err
+		}
+		out.Ledger = append(out.Ledger, row)
+	}
+	return out, rows.Err()
 }
 
 func normalizeRestrictionType(v string) (string, error) {

@@ -11,9 +11,12 @@ import (
 )
 
 const (
-	PaymentPurposeWalletExpand   = "MARKET_SLOT_WALLET_EXPAND"
-	PaymentPurposeBagExpand      = "BAG_EXPAND"
-	PaymentPurposeTradingLicense = "TRADING_LICENSE"
+	PaymentPurposeWalletExpand         = "MARKET_SLOT_WALLET_EXPAND"
+	PaymentPurposeBagExpand            = "BAG_EXPAND"
+	PaymentPurposeTradingLicense       = "TRADING_LICENSE"
+	PaymentPurposeLotteryDraw          = "LOTTERY_DRAW"
+	PaymentPurposeBountySlotUnlock     = "BOUNTY_SLOT_UNLOCK"
+	PaymentPurposeBountyPremiumRefresh = "BOUNTY_PREMIUM_REFRESH"
 )
 
 type GrowthPaymentRules struct {
@@ -76,7 +79,7 @@ type GrowthPaymentResult struct {
 
 func supportedPaymentPurpose(purpose string) bool {
 	switch purpose {
-	case PaymentPurposeWalletExpand, PaymentPurposeBagExpand, PaymentPurposeTradingLicense:
+	case PaymentPurposeWalletExpand, PaymentPurposeBagExpand, PaymentPurposeTradingLicense, PaymentPurposeLotteryDraw, PaymentPurposeBountySlotUnlock, PaymentPurposeBountyPremiumRefresh:
 		return true
 	default:
 		return false
@@ -85,7 +88,7 @@ func supportedPaymentPurpose(purpose string) bool {
 
 func (s *PostgresStore) CreateBagExpandPayment(req GrowthPaymentRequest) (GrowthPaymentResult, error) {
 	rules := req.Rules.withDefaults()
-	return runIdempotentAction(s, "bag_expand_create", req.OpID, req.AccountID, req.CharacterID, func(ctx context.Context, tx pgx.Tx) (GrowthPaymentResult, error) {
+	return runIdempotentAction(s, "bag_expand_create", req.OpID, req.AccountID, req.CharacterID, req, func(ctx context.Context, tx pgx.Tx) (GrowthPaymentResult, error) {
 		if strings.TrimSpace(rules.DepositReceiverWallet) == "" {
 			return GrowthPaymentResult{}, errors.New("deposit receiver wallet is not configured")
 		}
@@ -134,7 +137,7 @@ func (s *PostgresStore) CreateBagExpandPayment(req GrowthPaymentRequest) (Growth
 
 func (s *PostgresStore) CreateTradingLicensePayment(req GrowthPaymentRequest) (GrowthPaymentResult, error) {
 	rules := req.Rules.withDefaults()
-	return runIdempotentAction(s, "trading_license_create", req.OpID, req.AccountID, 0, func(ctx context.Context, tx pgx.Tx) (GrowthPaymentResult, error) {
+	return runIdempotentAction(s, "trading_license_create", req.OpID, req.AccountID, 0, req, func(ctx context.Context, tx pgx.Tx) (GrowthPaymentResult, error) {
 		if strings.TrimSpace(rules.DepositReceiverWallet) == "" {
 			return GrowthPaymentResult{}, errors.New("deposit receiver wallet is not configured")
 		}

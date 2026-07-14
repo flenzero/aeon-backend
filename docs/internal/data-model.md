@@ -24,6 +24,8 @@ They coordinate through durable rows, not process memory.
 `game server` data:
 
 - `game_servers`
+- `service_identities`
+- `service_request_nonces`
 - `game_tickets`
 - `online_sessions`
 - `game_server_commands`
@@ -66,6 +68,7 @@ They coordinate through durable rows, not process memory.
 `admin and operations` data:
 
 - `admin_users`
+- `admin_login_nonces`
 - `admin_audit_logs`
 - `economy_config_versions`
 - `revenue_events`
@@ -73,18 +76,40 @@ They coordinate through durable rows, not process memory.
 
 ## Balance Rules
 
-GAME values are stored as integer base units in `NUMERIC(38, 0)`. This avoids
+AEB values are stored as integer base units in `NUMERIC(38, 0)`. This avoids
 floating point drift and keeps the schema compatible with SPL token decimals.
 
 Gold and gems are off-chain game values:
 
 - Gold lives in `character_wallets.gold`.
 - Gems live in `character_wallets.gems`.
-- GAME lives at account level in `account_tokens`.
+- AEB lives at account level in `account_tokens`.
 
-`locked_game_records` is the source of truth for cooldown GAME. A matured record
+`locked_game_records` is the source of truth for cooldown AEB. A matured record
 is marked `UNLOCKED` by `economy-worker`; the corresponding amount is moved from
 `account_tokens.locked_balance` to `account_tokens.withdrawable_balance`.
+
+## Service Identity Rules
+
+## Admin Identity Rules
+
+`admin_users` stores ordinary administrator Ed25519 public keys and status.
+Super administrators create these rows before an operator can log in. The
+private key stays with the operator. `admin_login_nonces` stores one-time login
+challenges; a successful signature consumes the nonce and returns a short-lived
+JWT. Every authenticated admin request rechecks the current `admin_users` row,
+so disabling an admin invalidates existing unexpired JWTs.
+
+## Service Identity Rules
+
+`service_identities` stores public Ed25519 identities only. `kind` constrains the
+capabilities that can be granted; an active `GAME_SERVER` subject is unique.
+Disabling is a retained state transition rather than physical deletion, so audit
+history and incident evidence survive revocation.
+
+`service_request_nonces` makes each signed request one-time within its timestamp
+window. The primary key `(service_id, nonce)` makes replay rejection atomic even
+when two API replicas receive the same request concurrently.
 
 ## Dungeon Run Rules
 
@@ -92,6 +117,10 @@ is marked `UNLOCKED` by `economy-worker`; the corresponding amount is moved from
 Entering creates a `STARTED` run with a generated `dungeonRunId`. Finishing a
 run requires the same account, character, chapter and floor, and only a
 `STARTED` run can be finished.
+
+`origin_server_id` records the Game Server that entered the run. A partial
+unique index permits only one `STARTED` run per Character. Recovery abandonment
+sets `CANCELLED` and `finished_at` without applying experience, loot or AEB.
 
 The `result` JSON stores the accepted finish facts, including `result`, `exp`,
 optional `kills` and optional `progress`. Defeat and timeout progress is stored
@@ -102,7 +131,7 @@ Current validation covers ownership, status, chapter/floor match, allowed result
 values, non-negative exp and configured exp caps. Victory rewards are generated
 from `configs/economy`: item rewards enter `loot_tray_items`, equipment rewards
 create unique `equipment_items` rows in `IN_LOOT_TRAY`, and token rewards enter
-locked GAME records.
+locked AEB records.
 
 ## Inventory And Equipment Rules
 
@@ -138,7 +167,7 @@ Economy parameters should not be hard-coded in service binaries. Runtime-tuned
 values live in `economy_config_versions`:
 
 - withdrawal limits
-- Gold to GAME conversion limits
+- Gold to AEB conversion limits
 - contribution tier cooldowns
 - chain defaults
 - later: marketplace fee split, burn/recycle/reward split, NFT mint price
@@ -158,9 +187,7 @@ The worker owns time-based state transitions:
 - update `chain_cursors`
 - monitor `hot_wallet_status`
 
-The worker should use row locks and small batches when the Postgres adapter is
-implemented.
-
-The first Postgres adapter now uses row locks for the two implemented worker
-state transitions: locked GAME unlock settlement and withdrawal queue
-processing.
+The PostgreSQL adapter uses row locks and bounded batches for worker state
+transitions. Withdrawal payout creation also has a unique constraint by
+withdrawal, and verified payment receipts have a unique chain signature so
+retries cannot create duplicate value.

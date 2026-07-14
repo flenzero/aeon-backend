@@ -17,7 +17,10 @@ Rules:
 - update scripts are append-only history
 - every accepted update must also be folded back into
   `../aeonblight_full_schema.sql`
-- Docker fresh initialization mounts only the full schema file, so these update
-  scripts are not replayed on top of a complete new database
-- update scripts should be safe to run once against an existing database and
-  recorded by the operator or migration runner
+- applications and Docker startup never execute schema changes
+- technicians use only `scripts/db-migrate.sh bootstrap` for a new database or
+  `scripts/db-migrate.sh up` for an existing database
+- there is no automatic down migration; use expand/migrate/contract and a
+  reviewed forward fix when rollback is required
+- update scripts should be safe to run once and record their filename (without
+  `.sql`) in `schema_migrations`

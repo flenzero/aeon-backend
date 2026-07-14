@@ -1,0 +1,25 @@
+{
+  "priceAeb": 30,
+  "maxCount": 10,
+  "categoryWeights": {
+    "equipment": 850,
+    "rare_material": 135,
+    "boss_ticket": 10,
+    "mount": 5
+  },
+  "equipmentRarityWeights": {
+    "3": 80,
+    "4": 15,
+    "5": 5
+  },
+  "rareMaterialItemIds": [
+    "ashwood_blue", "ashwood_purple", "gloomstone_blue", "gloomstone_purple",
+    "shadow_iron_blue", "shadow_iron_purple", "gloomcap_spore_blue", "gloomcap_spore_purple"
+  ],
+  "bossTicketItemIds": [
+    "boss_ticket_ashen_threshold", "boss_ticket_gloomwood", "boss_ticket_voidscar"
+  ],
+  "mountItemIds": [
+    "mount_carrion_scarab", "mount_grimfang_wolf", "mount_mire_tusker", "mount_bramble_mane", "mount_dreadhorn_ox"
+  ]
+}

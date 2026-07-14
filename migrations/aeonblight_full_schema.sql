@@ -107,6 +107,10 @@ CREATE TABLE IF NOT EXISTS characters (
   position JSONB NOT NULL DEFAULT '{}'::jsonb,
   appearance JSONB NOT NULL DEFAULT '{}'::jsonb,
   bag_expand_count INTEGER NOT NULL DEFAULT 0,
+  highest_cleared_chapter INTEGER NOT NULL DEFAULT 0,
+  highest_cleared_floor INTEGER NOT NULL DEFAULT 0,
+  dungeon_clear_count BIGINT NOT NULL DEFAULT 0,
+  last_dungeon_cleared_at TIMESTAMPTZ,
   is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -116,6 +120,9 @@ CREATE TABLE IF NOT EXISTS characters (
 
 CREATE INDEX IF NOT EXISTS idx_characters_account
   ON characters(account_id, is_deleted, id);
+
+CREATE INDEX IF NOT EXISTS idx_characters_compensation
+  ON characters(is_deleted, level, highest_cleared_chapter, highest_cleared_floor);
 
 -- ---------------------------------------------------------------------------
 -- Game server discovery, launch tickets and live sessions
@@ -135,11 +142,43 @@ CREATE TABLE IF NOT EXISTS game_servers (
   registered_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   last_heartbeat_at TIMESTAMPTZ,
   CONSTRAINT chk_game_servers_status
-    CHECK (status IN ('STARTING', 'ONLINE', 'DRAINING', 'OFFLINE'))
+    CHECK (status IN ('STARTING', 'ONLINE', 'DRAINING', 'OFFLINE', 'MAINTENANCE', 'DISABLED'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_game_servers_status
   ON game_servers(status, last_heartbeat_at DESC);
+
+CREATE TABLE IF NOT EXISTS service_identities (
+  service_id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  subject_id TEXT,
+  public_key TEXT NOT NULL UNIQUE,
+  capabilities JSONB NOT NULL DEFAULT '[]'::jsonb,
+  status TEXT NOT NULL DEFAULT 'ACTIVE',
+  created_by TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  disabled_by TEXT,
+  disabled_at TIMESTAMPTZ,
+  disable_reason TEXT,
+  CONSTRAINT chk_service_identities_kind CHECK (kind IN ('GAME_SERVER', 'WORKER', 'CHAIN_OPERATOR', 'MINT_OPERATOR', 'OPS')),
+  CONSTRAINT chk_service_identities_status CHECK (status IN ('ACTIVE', 'DISABLED'))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_active_game_server_subject
+  ON service_identities(subject_id)
+  WHERE kind = 'GAME_SERVER' AND status = 'ACTIVE';
+
+CREATE TABLE IF NOT EXISTS service_request_nonces (
+  service_id TEXT NOT NULL REFERENCES service_identities(service_id) ON DELETE CASCADE,
+  nonce TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY(service_id, nonce)
+);
+
+CREATE INDEX IF NOT EXISTS idx_service_request_nonces_expiry
+  ON service_request_nonces(expires_at);
 
 CREATE TABLE IF NOT EXISTS game_tickets (
   ticket TEXT PRIMARY KEY,
@@ -397,6 +436,8 @@ CREATE TABLE IF NOT EXISTS equipment_items (
   affixes JSONB NOT NULL DEFAULT '[]'::jsonb,
   bind_type TEXT NOT NULL DEFAULT 'BOUND',
   minted_nft_id BIGINT,
+  npc_recycled_at TIMESTAMPTZ,
+  npc_recycle_expires_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT uq_equipment_items_uid UNIQUE (equipment_uid),
@@ -412,6 +453,7 @@ CREATE TABLE IF NOT EXISTS equipment_items (
       'ON_CHAIN',
       'LISTED',
       'MARKET_CLAIM_PENDING',
+      'NPC_RECYCLED',
       'CONSUMED',
       'DELETED',
       'BURNED'
@@ -425,6 +467,10 @@ CREATE INDEX IF NOT EXISTS idx_equipment_items_account_location
 
 CREATE INDEX IF NOT EXISTS idx_equipment_items_character_location
   ON equipment_items(character_id, location);
+
+CREATE INDEX IF NOT EXISTS idx_equipment_items_npc_recycle_expiry
+  ON equipment_items(npc_recycle_expires_at)
+  WHERE location = 'NPC_RECYCLED';
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_equipment_items_character_bag_slot
   ON equipment_items(character_id, location, slot)
@@ -505,6 +551,7 @@ CREATE TABLE IF NOT EXISTS dungeon_runs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   account_id BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   character_id BIGINT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  origin_server_id TEXT REFERENCES game_servers(server_id) ON DELETE SET NULL,
   dungeon_key TEXT NOT NULL,
   difficulty TEXT,
   status TEXT NOT NULL DEFAULT 'STARTED',
@@ -518,6 +565,13 @@ CREATE TABLE IF NOT EXISTS dungeon_runs (
 
 CREATE INDEX IF NOT EXISTS idx_dungeon_runs_character
   ON dungeon_runs(character_id, started_at DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_dungeon_runs_active_character
+  ON dungeon_runs(character_id)
+  WHERE status = 'STARTED';
+
+CREATE INDEX IF NOT EXISTS idx_dungeon_runs_origin_status
+  ON dungeon_runs(origin_server_id, status, started_at DESC);
 
 CREATE TABLE IF NOT EXISTS gathering_settlements (
   id BIGSERIAL PRIMARY KEY,
@@ -675,6 +729,54 @@ CREATE TABLE IF NOT EXISTS economy_payment_orders (
     CHECK (status IN ('PENDING_PAYMENT', 'SUBMITTED', 'CONFIRMED', 'FULFILLED', 'EXPIRED', 'CANCELLED', 'ANOMALY'))
 );
 
+CREATE TABLE IF NOT EXISTS bounty_account_slot_unlocks (
+  account_id BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  slot_index INTEGER NOT NULL CHECK (slot_index BETWEEN 3 AND 5),
+  unlocked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  payment_order_id UUID REFERENCES economy_payment_orders(id) ON DELETE SET NULL,
+  PRIMARY KEY (account_id, slot_index)
+);
+
+CREATE TABLE IF NOT EXISTS bounty_character_slots (
+  character_id BIGINT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  slot_index INTEGER NOT NULL CHECK (slot_index BETWEEN 1 AND 2),
+  unlocked_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (character_id, slot_index)
+);
+
+CREATE TABLE IF NOT EXISTS bounty_tasks (
+  id BIGSERIAL PRIMARY KEY,
+  account_id BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  character_id BIGINT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  slot_index INTEGER NOT NULL CHECK (slot_index BETWEEN 1 AND 5),
+  template_id TEXT NOT NULL, task_type TEXT NOT NULL, difficulty TEXT NOT NULL,
+  item_id TEXT, min_rarity INTEGER, required_quantity BIGINT NOT NULL,
+  progress_quantity BIGINT NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'ACTIVE', reward_item_id TEXT NOT NULL,
+  reward_quantity BIGINT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  completed_at TIMESTAMPTZ, claimed_at TIMESTAMPTZ, replaced_at TIMESTAMPTZ
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_bounty_active_slot
+  ON bounty_tasks(character_id, slot_index) WHERE status IN ('ACTIVE', 'COMPLETED');
+
+CREATE INDEX IF NOT EXISTS idx_bounty_tasks_character_status
+  ON bounty_tasks(character_id, status, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS bounty_refreshes (
+  character_id BIGINT PRIMARY KEY REFERENCES characters(id) ON DELETE CASCADE,
+  free_refresh_available_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS bounty_combat_submissions (
+  dungeon_run_id UUID PRIMARY KEY REFERENCES dungeon_runs(id) ON DELETE CASCADE,
+  character_id BIGINT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  op_id TEXT NOT NULL UNIQUE,
+  kill_count BIGINT NOT NULL CHECK (kill_count > 0),
+  submitted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE INDEX IF NOT EXISTS idx_economy_payment_orders_account
   ON economy_payment_orders(account_id, created_at DESC);
 
@@ -701,8 +803,9 @@ CREATE TABLE IF NOT EXISTS withdrawals (
   reviewed_at TIMESTAMPTZ,
   processed_at TIMESTAMPTZ,
   confirmed_at TIMESTAMPTZ,
+  CONSTRAINT chk_withdrawals_amount_positive CHECK (amount > 0),
   CONSTRAINT chk_withdrawals_status
-    CHECK (status IN ('QUEUED', 'MANUAL_REVIEW', 'REJECTED', 'SUBMITTED', 'CONFIRMED', 'FAILED', 'CANCELLED'))
+    CHECK (status IN ('QUEUED', 'MANUAL_REVIEW', 'REJECTED', 'PAYOUT_CREATED', 'SUBMITTED', 'CONFIRMED', 'FAILED', 'CANCELLED'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_withdrawals_status_created
@@ -749,10 +852,15 @@ CREATE TABLE IF NOT EXISTS solana_payouts (
 CREATE INDEX IF NOT EXISTS idx_solana_payouts_status
   ON solana_payouts(status, created_at);
 
+CREATE UNIQUE INDEX IF NOT EXISTS uq_solana_payouts_withdrawal
+  ON solana_payouts(withdrawal_id)
+  WHERE withdrawal_id IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS chain_cursors (
   name TEXT PRIMARY KEY,
   network TEXT NOT NULL,
   cursor_slot BIGINT NOT NULL DEFAULT 0,
+  cursor_signature TEXT,
   status TEXT NOT NULL DEFAULT 'OK',
   lag_slots BIGINT NOT NULL DEFAULT 0,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -844,16 +952,36 @@ CREATE TABLE IF NOT EXISTS revenue_allocations (
 CREATE TABLE IF NOT EXISTS admin_users (
   id TEXT PRIMARY KEY,
   username TEXT NOT NULL UNIQUE,
+  public_key TEXT NOT NULL UNIQUE,
   password_hash TEXT,
   status TEXT NOT NULL DEFAULT 'ACTIVE',
   role TEXT NOT NULL DEFAULT 'OPERATOR',
+  created_by TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   last_login_at TIMESTAMPTZ,
+  disabled_by TEXT,
+  disabled_at TIMESTAMPTZ,
+  disable_reason TEXT,
   CONSTRAINT chk_admin_users_status
     CHECK (status IN ('ACTIVE', 'DISABLED')),
   CONSTRAINT chk_admin_users_role
     CHECK (role IN ('SUPER_ADMIN', 'OPERATOR', 'FINANCE', 'SUPPORT', 'VIEWER'))
 );
+
+CREATE TABLE IF NOT EXISTS admin_login_nonces (
+  nonce TEXT PRIMARY KEY,
+  admin_id TEXT NOT NULL REFERENCES admin_users(id) ON DELETE CASCADE,
+  message TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'PENDING',
+  expires_at TIMESTAMPTZ NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  consumed_at TIMESTAMPTZ,
+  CONSTRAINT chk_admin_login_nonces_status
+    CHECK (status IN ('PENDING', 'CONSUMED', 'EXPIRED'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_login_nonces_admin
+  ON admin_login_nonces(admin_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS admin_audit_logs (
   id BIGSERIAL PRIMARY KEY,
@@ -871,6 +999,44 @@ CREATE TABLE IF NOT EXISTS admin_audit_logs (
 
 CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_target
   ON admin_audit_logs(target_type, target_id, created_at DESC);
+
+-- Idempotency records for super-admin mutations.  The JSON response permits a
+-- retried operation to return its original result without repeating the write.
+CREATE TABLE IF NOT EXISTS admin_operation_logs (
+  op_id TEXT PRIMARY KEY,
+  admin_id TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target TEXT NOT NULL,
+  response JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_operation_logs_created_at
+  ON admin_operation_logs(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS admin_operation_previews (
+  preview_id TEXT PRIMARY KEY,
+  admin_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  character_id BIGINT REFERENCES characters(id) ON DELETE CASCADE,
+  payload JSONB NOT NULL,
+  status TEXT NOT NULL DEFAULT 'PENDING',
+  expires_at TIMESTAMPTZ NOT NULL,
+  committed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT chk_admin_operation_previews_kind CHECK (kind IN ('COMPENSATION', 'LOTTERY')),
+  CONSTRAINT chk_admin_operation_previews_status CHECK (status IN ('PENDING', 'COMMITTED', 'EXPIRED'))
+);
+
+CREATE TABLE IF NOT EXISTS admin_operation_preview_targets (
+  preview_id TEXT NOT NULL REFERENCES admin_operation_previews(preview_id) ON DELETE CASCADE,
+  account_id BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  character_id BIGINT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  PRIMARY KEY (preview_id, character_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_operation_previews_active
+  ON admin_operation_previews(admin_id, kind, status, expires_at DESC);
 
 CREATE TABLE IF NOT EXISTS economy_config_versions (
   id BIGSERIAL PRIMARY KEY,
@@ -923,11 +1089,29 @@ VALUES
     'gold.convert',
     '{"goldPerGame":"10","userDailyGameMin":"100","userDailyGameMax":"300","globalDailyGameMin":"10000","globalDailyGameMax":"20000","storageDays":5}'::jsonb,
     'ACTIVE',
-    'Initial Gold to GAME conversion guardrails',
+    'Initial Gold to AEB conversion guardrails',
     NOW()
   )
 ON CONFLICT DO NOTHING;
 
 INSERT INTO schema_migrations (version)
-VALUES ('aeonblight_full_schema')
+VALUES
+  ('aeonblight_full_schema'),
+  ('20260710_add_equipment_loot_tray_location'),
+  ('20260710_bag_license_v1'),
+  ('20260710_marketplace_v1'),
+  ('20260710_solana_chain_v1'),
+  ('20260710_solana_payment_matched'),
+  ('20260712_chain_receipts_v1'),
+  ('20260712_deposit_cursor_v1'),
+  ('20260712_dungeon_recovery_v1'),
+  ('20260712_economy_boundaries_v1'),
+  ('20260712_service_identities_v1'),
+  ('20260712_runtime_profiles_v1'),
+  ('20260713_bounty_board_v1'),
+  ('20260713_bounty_combat_proofs_v1'),
+  ('20260713_equipment_npc_recycle_v1'),
+  ('20260714_admin_compensation_v1'),
+  ('20260714_super_admin_ops_v1'),
+  ('20260714_admin_signed_login_v1')
 ON CONFLICT DO NOTHING;

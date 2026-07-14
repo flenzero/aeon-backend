@@ -1,11 +1,15 @@
 package httpx
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 )
+
+const MaxJSONBodyBytes int64 = 1 << 20
 
 type Envelope struct {
 	OK    bool        `json:"ok"`
@@ -33,9 +37,17 @@ func Error(w http.ResponseWriter, status int, code int, message string) {
 
 func Decode(r *http.Request, dst any) bool {
 	defer r.Body.Close()
-	decoder := json.NewDecoder(r.Body)
+	raw, err := io.ReadAll(io.LimitReader(r.Body, MaxJSONBodyBytes+1))
+	if err != nil || int64(len(raw)) > MaxJSONBodyBytes {
+		return false
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	return decoder.Decode(dst) == nil
+	if err := decoder.Decode(dst); err != nil {
+		return false
+	}
+	var trailing any
+	return errors.Is(decoder.Decode(&trailing), io.EOF)
 }
 
 func AccountID(r *http.Request) (int64, error) {

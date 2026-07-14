@@ -32,7 +32,7 @@ func (s *PostgresStore) BossOpenEvent(req BossOpenEventRequest) (BossEvent, erro
 		return BossEvent{}, err
 	}
 
-	return runIdempotentAction(s, "boss_event_open", req.OpID, 0, 0, func(ctx context.Context, tx pgx.Tx) (BossEvent, error) {
+	return runIdempotentAction(s, "boss_event_open", req.OpID, 0, 0, req, func(ctx context.Context, tx pgx.Tx) (BossEvent, error) {
 		var openCount int
 		if err := tx.QueryRow(ctx, `
 			SELECT COUNT(*)
@@ -68,7 +68,7 @@ func (s *PostgresStore) BossCloseEvent(req BossCloseEventRequest) (BossEvent, er
 	if req.BossEventID <= 0 {
 		return BossEvent{}, errors.New("bossEventId is required")
 	}
-	return runIdempotentAction(s, "boss_event_close", req.OpID, 0, 0, func(ctx context.Context, tx pgx.Tx) (BossEvent, error) {
+	return runIdempotentAction(s, "boss_event_close", req.OpID, 0, 0, req, func(ctx context.Context, tx pgx.Tx) (BossEvent, error) {
 		bossKey, status, _, _, err := s.lockBossEvent(ctx, tx, req.BossEventID)
 		if err != nil {
 			return BossEvent{}, err
@@ -103,7 +103,7 @@ func (s *PostgresStore) BossMarkSettled(req BossMarkSettledRequest) (BossEvent, 
 	if req.BossEventID <= 0 {
 		return BossEvent{}, errors.New("bossEventId is required")
 	}
-	return runIdempotentAction(s, "boss_event_settle", req.OpID, 0, 0, func(ctx context.Context, tx pgx.Tx) (BossEvent, error) {
+	return runIdempotentAction(s, "boss_event_settle", req.OpID, 0, 0, req, func(ctx context.Context, tx pgx.Tx) (BossEvent, error) {
 		_, status, _, _, err := s.lockBossEvent(ctx, tx, req.BossEventID)
 		if err != nil {
 			return BossEvent{}, err

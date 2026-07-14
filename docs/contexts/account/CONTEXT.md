@@ -12,10 +12,19 @@ short-lived launch ticket; game servers consume it through an internal route.
 - **Session** — revocable login state with access and refresh tokens.
 - **Character** — a playable identity owned by an Account.
 - **Game Server** — a gameplay partition, not a separate economy.
+- **Service Identity** — one super-admin-approved Ed25519 public identity for a
+  machine caller, with explicit capabilities and revocable status.
 - **Launch Ticket** — short-lived, one-time admission proof for a Character.
 - **Online Presence** — the current Game Server connection for an Account.
+- **Dungeon Recovery** — the home-screen decision that either issues an
+  origin-server-only Launch Ticket or cancels an unfinished Dungeon Run without rewards.
 
 ## Runtime
 
 `account-api` is independently restartable. PostgreSQL is the durable source of
 truth; Redis is the hot adapter for sessions and online presence.
+Each production Game Server uses a different Service Identity whose `subjectId`
+must match its `serverId`; it cannot act on another Game Server's tickets,
+heartbeat, or online presence.
+Redis stores a hot Dungeon Recovery hint, but PostgreSQL remains authoritative
+for whether the run is still `STARTED`.

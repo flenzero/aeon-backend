@@ -12,6 +12,9 @@ import (
 
 func main() {
 	cfg := config.Load("economy-api", ":8082")
+	if err := cfg.ValidateStartup(); err != nil {
+		log.Fatal(err)
+	}
 	st, closeStore := store.Open(context.Background(), cfg)
 	defer closeStore()
 	handler := economy.NewHandler(cfg, st)

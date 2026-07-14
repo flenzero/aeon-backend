@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -11,18 +12,31 @@ import (
 )
 
 type NFTRules struct {
-	MintFeeToken int64
-	MinRarity    int
+	MintFeesByRarity map[int]int64
+	MinRarity        int
 }
 
 func (r NFTRules) WithDefaults() NFTRules {
-	if r.MintFeeToken <= 0 {
-		r.MintFeeToken = 200
-	}
 	if r.MinRarity <= 0 {
 		r.MinRarity = 3
 	}
+	if len(r.MintFeesByRarity) == 0 {
+		r.MintFeesByRarity = map[int]int64{3: 500, 4: 2000, 5: 10000}
+	}
 	return r
+}
+
+func (r NFTRules) MintFeeForRarity(rarity int) int64 {
+	r = r.WithDefaults()
+	bestRarity := -1
+	fee := int64(0)
+	for configuredRarity, configuredFee := range r.MintFeesByRarity {
+		if configuredRarity >= r.MinRarity && configuredRarity <= rarity && configuredRarity > bestRarity && configuredFee > 0 {
+			bestRarity = configuredRarity
+			fee = configuredFee
+		}
+	}
+	return fee
 }
 
 type NFTAsset struct {
@@ -39,18 +53,29 @@ type NFTAsset struct {
 }
 
 type NFTMintRequest struct {
-	ID              int64      `json:"id"`
-	AccountID       int64      `json:"accountId"`
-	NFTAssetID      int64      `json:"nftAssetId,omitempty"`
-	SourceAssetType string     `json:"sourceAssetType"`
-	SourceAssetID   int64      `json:"sourceAssetId"`
-	MintFeeToken    int64      `json:"mintFeeToken"`
-	Status          string     `json:"status"`
-	TxSignature     string     `json:"txSignature,omitempty"`
-	CreatedAt       time.Time  `json:"createdAt"`
-	SubmittedAt     *time.Time `json:"submittedAt,omitempty"`
-	ConfirmedAt     *time.Time `json:"confirmedAt,omitempty"`
-	EquipmentUID    string     `json:"equipmentUid,omitempty"`
+	ID              int64               `json:"id"`
+	AccountID       int64               `json:"accountId"`
+	NFTAssetID      int64               `json:"nftAssetId,omitempty"`
+	SourceAssetType string              `json:"sourceAssetType"`
+	SourceAssetID   int64               `json:"sourceAssetId"`
+	MintFeeToken    int64               `json:"mintFeeToken"`
+	Status          string              `json:"status"`
+	TxSignature     string              `json:"txSignature,omitempty"`
+	CreatedAt       time.Time           `json:"createdAt"`
+	SubmittedAt     *time.Time          `json:"submittedAt,omitempty"`
+	ConfirmedAt     *time.Time          `json:"confirmedAt,omitempty"`
+	EquipmentUID    string              `json:"equipmentUid,omitempty"`
+	FeeSpend        TokenSpendBreakdown `json:"-"`
+	RequestOpID     string              `json:"-"`
+}
+
+type nftMintMetadata struct {
+	EquipmentUID string              `json:"equipmentUid"`
+	RequestOpID  string              `json:"opId"`
+	TokenSymbol  string              `json:"tokenSymbol"`
+	Rarity       int                 `json:"rarity"`
+	FeeSnapshot  int64               `json:"feeSnapshot"`
+	FeeSpend     TokenSpendBreakdown `json:"feeSpend"`
 }
 
 type NFTMintRequestInput struct {
@@ -81,7 +106,7 @@ func (s *PostgresStore) RequestNFTMint(req NFTMintRequestInput) (NFTMintRequestR
 	if uid == "" {
 		return NFTMintRequestResult{}, errors.New("equipmentUid is required")
 	}
-	return runIdempotentAction(s, "nft_mint_request", req.OpID, req.AccountID, req.CharacterID, func(ctx context.Context, tx pgx.Tx) (NFTMintRequestResult, error) {
+	return runIdempotentAction(s, "nft_mint_request", req.OpID, req.AccountID, req.CharacterID, req, func(ctx context.Context, tx pgx.Tx) (NFTMintRequestResult, error) {
 		if err := s.lockCharacter(ctx, tx, req.AccountID, req.CharacterID); err != nil {
 			return NFTMintRequestResult{}, err
 		}
@@ -106,6 +131,10 @@ func (s *PostgresStore) RequestNFTMint(req NFTMintRequestInput) (NFTMintRequestR
 		if rarity < rules.MinRarity {
 			return NFTMintRequestResult{}, fmt.Errorf("equipment rarity %d below mint minimum %d", rarity, rules.MinRarity)
 		}
+		mintFee := rules.MintFeeForRarity(rarity)
+		if mintFee <= 0 {
+			return NFTMintRequestResult{}, fmt.Errorf("equipment rarity %d has no configured AEB mint fee", rarity)
+		}
 		var existing int
 		if err := tx.QueryRow(ctx, `
 			SELECT COUNT(*)::int FROM nft_assets
@@ -118,18 +147,29 @@ func (s *PostgresStore) RequestNFTMint(req NFTMintRequestInput) (NFTMintRequestR
 			return NFTMintRequestResult{}, errors.New("equipment already has an nft record")
 		}
 
-		spend, err := s.spendTokenInTx(ctx, tx, req.AccountID, rules.MintFeeToken)
+		spend, err := s.spendTokenInTx(ctx, tx, req.AccountID, mintFee)
 		if err != nil {
 			return NFTMintRequestResult{}, fmt.Errorf("mint fee: %w", err)
 		}
-		burn := bpsCeil(rules.MintFeeToken, 1000)
-		recycle := bpsCeil(rules.MintFeeToken, 8000)
-		rewards := rules.MintFeeToken - burn - recycle
+		burn := bpsCeil(mintFee, 1000)
+		recycle := bpsCeil(mintFee, 8000)
+		rewards := mintFee - burn - recycle
 		if rewards < 0 {
 			rewards = 0
 		}
+		metadataRaw, err := json.Marshal(nftMintMetadata{
+			EquipmentUID: uid,
+			RequestOpID:  req.OpID,
+			TokenSymbol:  "AEB",
+			Rarity:       rarity,
+			FeeSnapshot:  mintFee,
+			FeeSpend:     spend,
+		})
+		if err != nil {
+			return NFTMintRequestResult{}, err
+		}
 		if err := s.insertSystemConsumption(ctx, tx, req.OpID, req.AccountID, req.CharacterID, spend, "NFT_MINT_FEE",
-			rules.MintFeeToken, burn, recycle, rewards, fmt.Sprintf(`{"equipmentUid":%q}`, uid)); err != nil {
+			mintFee, burn, recycle, rewards, string(metadataRaw)); err != nil {
 			return NFTMintRequestResult{}, err
 		}
 
@@ -146,9 +186,9 @@ func (s *PostgresStore) RequestNFTMint(req NFTMintRequestInput) (NFTMintRequestR
 		err = tx.QueryRow(ctx, `
 			INSERT INTO nft_mint_requests (
 				account_id, nft_asset_id, source_asset_type, source_asset_id, mint_fee_token, status, metadata
-			) VALUES ($1, $2, 'EQUIPMENT', $3, $4, 'PAID', jsonb_build_object('equipmentUid', $5::text, 'opId', $6::text))
+			) VALUES ($1, $2, 'EQUIPMENT', $3, $4, 'PAID', $5::jsonb)
 			RETURNING id
-		`, req.AccountID, assetID, equipID, rules.MintFeeToken, uid, req.OpID).Scan(&requestID)
+		`, req.AccountID, assetID, equipID, mintFee, string(metadataRaw)).Scan(&requestID)
 		if err != nil {
 			return NFTMintRequestResult{}, err
 		}
@@ -159,7 +199,7 @@ func (s *PostgresStore) RequestNFTMint(req NFTMintRequestInput) (NFTMintRequestR
 		`, equipID); err != nil {
 			return NFTMintRequestResult{}, err
 		}
-		if err := s.insertEconomyLedger(ctx, tx, req.AccountID, req.CharacterID, "NFT_MINT_REQUESTED", "AEB", rules.MintFeeToken, req.OpID); err != nil {
+		if err := s.insertEconomyLedger(ctx, tx, req.AccountID, req.CharacterID, "NFT_MINT_REQUESTED", "AEB", mintFee, req.OpID); err != nil {
 			return NFTMintRequestResult{}, err
 		}
 
@@ -185,7 +225,7 @@ func (s *PostgresStore) ConfirmNFTMint(req NFTMintConfirmInput) (NFTMintRequestR
 	if req.RequestID <= 0 {
 		return NFTMintRequestResult{}, errors.New("requestId is required")
 	}
-	return runIdempotentAction(s, "nft_mint_confirm", req.OpID, 0, 0, func(ctx context.Context, tx pgx.Tx) (NFTMintRequestResult, error) {
+	return runIdempotentAction(s, "nft_mint_confirm", req.OpID, 0, 0, req, func(ctx context.Context, tx pgx.Tx) (NFTMintRequestResult, error) {
 		request, err := s.lockNFTMintRequest(ctx, tx, req.RequestID)
 		if err != nil {
 			return NFTMintRequestResult{}, err
@@ -250,7 +290,11 @@ func (s *PostgresStore) ConfirmNFTMint(req NFTMintConfirmInput) (NFTMintRequestR
 }
 
 func (s *PostgresStore) CancelNFTMint(opID string, accountID, requestID int64) (NFTMintRequestResult, error) {
-	return runIdempotentAction(s, "nft_mint_cancel", opID, accountID, 0, func(ctx context.Context, tx pgx.Tx) (NFTMintRequestResult, error) {
+	request := struct {
+		RequestID int64 `json:"requestId"`
+		AccountID int64 `json:"accountId"`
+	}{RequestID: requestID, AccountID: accountID}
+	return runIdempotentAction(s, "nft_mint_cancel", opID, accountID, 0, request, func(ctx context.Context, tx pgx.Tx) (NFTMintRequestResult, error) {
 		request, err := s.lockNFTMintRequest(ctx, tx, requestID)
 		if err != nil {
 			return NFTMintRequestResult{}, err
@@ -263,8 +307,10 @@ func (s *PostgresStore) CancelNFTMint(opID string, accountID, requestID int64) (
 		}
 		now := time.Now().UTC()
 		if _, err := tx.Exec(ctx, `
-			UPDATE nft_mint_requests SET status = 'CANCELLED' WHERE id = $1
-		`, requestID); err != nil {
+			UPDATE nft_mint_requests
+			SET status = 'CANCELLED', metadata = metadata || jsonb_build_object('refundedAt', $2::text)
+			WHERE id = $1
+		`, requestID, now.Format(time.RFC3339Nano)); err != nil {
 			return NFTMintRequestResult{}, err
 		}
 		if _, err := tx.Exec(ctx, `
@@ -294,23 +340,12 @@ func (s *PostgresStore) CancelNFTMint(opID string, accountID, requestID int64) (
 				return NFTMintRequestResult{}, err
 			}
 		}
-		// Refund mint fee to withdrawable.
-		if _, err := tx.Exec(ctx, `INSERT INTO account_tokens (account_id) VALUES ($1) ON CONFLICT (account_id) DO NOTHING`, accountID); err != nil {
-			return NFTMintRequestResult{}, err
-		}
-		if _, err := tx.Exec(ctx, `
-			UPDATE account_tokens
-			SET withdrawable_balance = withdrawable_balance + $2,
-			    token_balance = token_balance + $2,
-			    updated_at = NOW()
-			WHERE account_id = $1
-		`, accountID, request.MintFeeToken); err != nil {
+		if err := s.refundNFTMintFee(ctx, tx, request); err != nil {
 			return NFTMintRequestResult{}, err
 		}
 		if err := s.insertEconomyLedger(ctx, tx, accountID, characterID, "NFT_MINT_CANCELLED", "AEB", request.MintFeeToken, opID); err != nil {
 			return NFTMintRequestResult{}, err
 		}
-		_ = now
 		request, err = s.loadNFTMintRequest(ctx, tx, requestID)
 		if err != nil {
 			return NFTMintRequestResult{}, err
@@ -325,6 +360,59 @@ func (s *PostgresStore) CancelNFTMint(opID string, accountID, requestID int64) (
 		}
 		return NFTMintRequestResult{Request: request, Asset: asset, Snapshot: snap}, nil
 	})
+}
+
+func (s *PostgresStore) refundNFTMintFee(ctx context.Context, tx pgx.Tx, request NFTMintRequest) error {
+	spend := request.FeeSpend
+	total := spend.Locked + spend.Withdrawable + spend.External
+	if total == 0 {
+		// Compatibility for requests created before fee-source snapshots existed.
+		spend.Withdrawable = request.MintFeeToken
+		total = request.MintFeeToken
+	}
+	if total != request.MintFeeToken {
+		return fmt.Errorf("mint fee snapshot is inconsistent: sources=%d fee=%d", total, request.MintFeeToken)
+	}
+	lockedSegmentsTotal := int64(0)
+	for _, segment := range spend.LockedSegments {
+		if segment.Amount <= 0 || segment.UnlockAt.IsZero() {
+			return errors.New("mint fee locked-source snapshot is invalid")
+		}
+		lockedSegmentsTotal += segment.Amount
+		if _, err := tx.Exec(ctx, `
+			INSERT INTO locked_token_records (
+				account_id, amount, remaining_amount, source, status, ref_type, ref_id, unlock_at
+			) VALUES ($1, $2, $2, 'NFT_MINT_REFUND', 'LOCKED', 'NFT_MINT_REQUEST', $3, $4)
+		`, request.AccountID, segment.Amount, fmt.Sprint(request.ID), segment.UnlockAt); err != nil {
+			return err
+		}
+	}
+	if lockedSegmentsTotal != spend.Locked {
+		return fmt.Errorf("mint fee locked-source snapshot is inconsistent: segments=%d locked=%d", lockedSegmentsTotal, spend.Locked)
+	}
+	if _, err := tx.Exec(ctx, `INSERT INTO account_tokens (account_id) VALUES ($1) ON CONFLICT (account_id) DO NOTHING`, request.AccountID); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(ctx, `
+		UPDATE account_tokens
+		SET locked_balance = locked_balance + $2,
+		    withdrawable_balance = withdrawable_balance + $3,
+		    external_balance = external_balance + $4,
+		    token_balance = token_balance + $5,
+		    updated_at = NOW()
+		WHERE account_id = $1
+	`, request.AccountID, spend.Locked, spend.Withdrawable, spend.External, request.MintFeeToken); err != nil {
+		return err
+	}
+	if request.RequestOpID != "" {
+		_, err := tx.Exec(ctx, `
+			UPDATE system_consumptions
+			SET metadata = metadata || jsonb_build_object('refunded', true, 'refundRequestId', $2::bigint)
+			WHERE op_id = $1
+		`, request.RequestOpID, request.ID)
+		return err
+	}
+	return nil
 }
 
 func (s *PostgresStore) ListNFTAssets(accountID int64) ([]NFTAsset, error) {
@@ -361,13 +449,14 @@ func (s *PostgresStore) lockNFTMintRequest(ctx context.Context, tx pgx.Tx, id in
 	var nftAssetID *int64
 	var txSig *string
 	var submitted, confirmed *time.Time
+	var metadataRaw []byte
 	err := tx.QueryRow(ctx, `
 		SELECT id, account_id, nft_asset_id, source_asset_type, source_asset_id, mint_fee_token::bigint,
-			status, tx_signature, created_at, submitted_at, confirmed_at
+			status, tx_signature, created_at, submitted_at, confirmed_at, metadata
 		FROM nft_mint_requests WHERE id = $1 FOR UPDATE
 	`, id).Scan(
 		&row.ID, &row.AccountID, &nftAssetID, &row.SourceAssetType, &row.SourceAssetID, &row.MintFeeToken,
-		&row.Status, &txSig, &row.CreatedAt, &submitted, &confirmed,
+		&row.Status, &txSig, &row.CreatedAt, &submitted, &confirmed, &metadataRaw,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return NFTMintRequest{}, ErrNotFound
@@ -383,6 +472,7 @@ func (s *PostgresStore) lockNFTMintRequest(ctx context.Context, tx pgx.Tx, id in
 	}
 	row.SubmittedAt = submitted
 	row.ConfirmedAt = confirmed
+	decodeNFTMintMetadata(metadataRaw, &row)
 	return row, nil
 }
 
@@ -391,13 +481,14 @@ func (s *PostgresStore) loadNFTMintRequest(ctx context.Context, q postgresReader
 	var nftAssetID *int64
 	var txSig *string
 	var submitted, confirmed *time.Time
+	var metadataRaw []byte
 	err := q.QueryRow(ctx, `
 		SELECT id, account_id, nft_asset_id, source_asset_type, source_asset_id, mint_fee_token::bigint,
-			status, tx_signature, created_at, submitted_at, confirmed_at
+			status, tx_signature, created_at, submitted_at, confirmed_at, metadata
 		FROM nft_mint_requests WHERE id = $1
 	`, id).Scan(
 		&row.ID, &row.AccountID, &nftAssetID, &row.SourceAssetType, &row.SourceAssetID, &row.MintFeeToken,
-		&row.Status, &txSig, &row.CreatedAt, &submitted, &confirmed,
+		&row.Status, &txSig, &row.CreatedAt, &submitted, &confirmed, &metadataRaw,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return NFTMintRequest{}, ErrNotFound
@@ -413,7 +504,18 @@ func (s *PostgresStore) loadNFTMintRequest(ctx context.Context, q postgresReader
 	}
 	row.SubmittedAt = submitted
 	row.ConfirmedAt = confirmed
+	decodeNFTMintMetadata(metadataRaw, &row)
 	return row, nil
+}
+
+func decodeNFTMintMetadata(raw []byte, row *NFTMintRequest) {
+	var metadata nftMintMetadata
+	if json.Unmarshal(raw, &metadata) != nil {
+		return
+	}
+	row.EquipmentUID = metadata.EquipmentUID
+	row.RequestOpID = metadata.RequestOpID
+	row.FeeSpend = metadata.FeeSpend
 }
 
 func (s *PostgresStore) loadNFTAsset(ctx context.Context, q postgresReader, id int64) (NFTAsset, error) {

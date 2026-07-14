@@ -1,0 +1,77 @@
+{
+  "stageMultipliers": {"1": 1.0, "5": 1.4, "10": 1.96, "15": 2.74, "20": 3.84, "25": 5.38, "30": 7.53},
+  "rarities": {
+    "1": {"name": "破损", "multiplier": 1.0, "affixCount": 1},
+    "2": {"name": "粗制", "multiplier": 1.1, "affixCount": 2},
+    "3": {"name": "精良", "multiplier": 1.22, "affixCount": 3},
+    "4": {"name": "卓越", "multiplier": 1.4, "affixCount": 4},
+    "5": {"name": "完美", "multiplier": 1.65, "affixCount": 5},
+    "6": {"name": "至臻", "multiplier": 1.95, "affixCount": 6}
+  },
+  "npcRecycleGoldByStage": {
+    "1": {"1": 80, "2": 100, "3": 130, "4": 170, "5": 230, "6": 300},
+    "5": {"1": 140, "2": 180, "3": 230, "4": 300, "5": 410, "6": 540},
+    "10": {"1": 240, "2": 310, "3": 400, "4": 520, "5": 700, "6": 920},
+    "15": {"1": 410, "2": 530, "3": 680, "4": 890, "5": 1200, "6": 1580},
+    "20": {"1": 700, "2": 910, "3": 1170, "4": 1530, "5": 2070, "6": 2720},
+    "25": {"1": 1190, "2": 1550, "3": 1990, "4": 2610, "5": 3520, "6": 4630},
+    "30": {"1": 2020, "2": 2630, "3": 3370, "4": 4420, "5": 5970, "6": 7850}
+  },
+  "enhancement": {
+    "maxLevel": 10,
+    "goldCostByStage": {
+      "1": [30, 45, 65, 90, 120, 160, 210, 280, 370, 490],
+      "5": [50, 75, 105, 145, 195, 260, 345, 455, 605, 800],
+      "10": [85, 125, 175, 240, 325, 435, 575, 765, 1015, 1350],
+      "15": [145, 215, 300, 415, 555, 740, 985, 1310, 1740, 2310],
+      "20": [245, 360, 505, 695, 930, 1240, 1650, 2200, 2920, 3880],
+      "25": [415, 610, 855, 1180, 1575, 2100, 2790, 3710, 4940, 6560],
+      "30": [700, 1030, 1440, 1980, 2650, 3530, 4700, 6250, 8310, 11050]
+    },
+    "stoneItemByStage": {"1":"enhancement_stone_t1","5":"enhancement_stone_t5","10":"enhancement_stone_t10","15":"enhancement_stone_t15","20":"enhancement_stone_t20","25":"enhancement_stone_t25","30":"enhancement_stone_t30"},
+    "stoneBaseCostByStageRarity": {
+      "1": [1,1,1,2,2,3], "5": [1,1,2,2,3,4], "10": [1,2,2,3,4,5], "15": [2,2,3,4,5,6],
+      "20": [2,3,4,5,6,8], "25": [3,4,5,6,8,10], "30": [4,5,6,8,10,12]
+    },
+    "stoneProgressionByLevel": [0,0,0,0,0,0,1,1,2,3]
+  },
+  "series": [
+    {"seriesId":"sword","equipSlot":4,"category":"weapon","displayType":"长剑","affixPoolId":"weapon_affixes","baseFlat":{"attack":8,"defense":1,"maxHp":4},"stages":[
+      {"stage":1,"itemId":"ashbound_sword_t1","prefix":"缚灰"},{"stage":5,"itemId":"gloomhide_sword_t5","prefix":"幽皮"},{"stage":10,"itemId":"shadowiron_sword_t10","prefix":"影铁","basePercent":{"critChance":0.01}},{"stage":15,"itemId":"nightglass_sword_t15","prefix":"夜璃","basePercent":{"critChance":0.02,"critDamage":0.04}},{"stage":20,"itemId":"eclipseguard_sword_t20","prefix":"蚀日卫","basePercent":{"critChance":0.03,"critDamage":0.06}},{"stage":25,"itemId":"voidforged_sword_t25","prefix":"虚铸","basePercent":{"critChance":0.04,"critDamage":0.08}},{"stage":30,"itemId":"aeonblight_sword_t30","prefix":"永劫蚀光","basePercent":{"critChance":0.05,"critDamage":0.10}}
+    ]},
+    {"seriesId":"axe","equipSlot":4,"category":"weapon","displayType":"战斧","affixPoolId":"weapon_affixes","baseFlat":{"attack":12,"maxHp":3},"stages":[
+      {"stage":1,"itemId":"ashbound_axe_t1","prefix":"缚灰","basePercent":{"attackSpeed":-0.08}},{"stage":5,"itemId":"gloomhide_axe_t5","prefix":"幽皮","basePercent":{"attackSpeed":-0.08}},{"stage":10,"itemId":"shadowiron_axe_t10","prefix":"影铁","basePercent":{"attackSpeed":-0.08,"critChance":0.01}},{"stage":15,"itemId":"nightglass_axe_t15","prefix":"夜璃","basePercent":{"attackSpeed":-0.08,"critChance":0.02,"critDamage":0.06}},{"stage":20,"itemId":"eclipseguard_axe_t20","prefix":"蚀日卫","basePercent":{"attackSpeed":-0.08,"critChance":0.03,"critDamage":0.08}},{"stage":25,"itemId":"voidforged_axe_t25","prefix":"虚铸","basePercent":{"attackSpeed":-0.08,"critChance":0.04,"critDamage":0.10}},{"stage":30,"itemId":"aeonblight_axe_t30","prefix":"永劫蚀光","basePercent":{"attackSpeed":-0.08,"critChance":0.05,"critDamage":0.12}}
+    ]},
+    {"seriesId":"bow","equipSlot":4,"category":"weapon","displayType":"长弓","affixPoolId":"weapon_affixes","baseFlat":{"attack":6},"stages":[
+      {"stage":1,"itemId":"ashbound_bow_t1","prefix":"缚灰","basePercent":{"attackSpeed":0.05}},{"stage":5,"itemId":"gloomhide_bow_t5","prefix":"幽皮","basePercent":{"attackSpeed":0.06}},{"stage":10,"itemId":"shadowiron_bow_t10","prefix":"影铁","basePercent":{"attackSpeed":0.07,"critChance":0.01}},{"stage":15,"itemId":"nightglass_bow_t15","prefix":"夜璃","basePercent":{"attackSpeed":0.08,"critChance":0.02,"critDamage":0.04}},{"stage":20,"itemId":"eclipseguard_bow_t20","prefix":"蚀日卫","basePercent":{"attackSpeed":0.09,"critChance":0.03,"critDamage":0.06}},{"stage":25,"itemId":"voidforged_bow_t25","prefix":"虚铸","basePercent":{"attackSpeed":0.10,"critChance":0.04,"critDamage":0.08}},{"stage":30,"itemId":"aeonblight_bow_t30","prefix":"永劫蚀光","basePercent":{"attackSpeed":0.11,"critChance":0.05,"critDamage":0.10}}
+    ]},
+    {"seriesId":"staff","equipSlot":4,"category":"weapon","displayType":"法杖","affixPoolId":"weapon_affixes","baseFlat":{"attack":7},"stages":[
+      {"stage":1,"itemId":"ashbound_staff_t1","prefix":"缚灰"},{"stage":5,"itemId":"gloomhide_staff_t5","prefix":"幽皮"},{"stage":10,"itemId":"shadowiron_staff_t10","prefix":"影铁","basePercent":{"critChance":0.01}},{"stage":15,"itemId":"nightglass_staff_t15","prefix":"夜璃","basePercent":{"critChance":0.02,"critDamage":0.06}},{"stage":20,"itemId":"eclipseguard_staff_t20","prefix":"蚀日卫","basePercent":{"critChance":0.03,"critDamage":0.08}},{"stage":25,"itemId":"voidforged_staff_t25","prefix":"虚铸","basePercent":{"critChance":0.04,"critDamage":0.10}},{"stage":30,"itemId":"aeonblight_staff_t30","prefix":"永劫蚀光","basePercent":{"critChance":0.05,"critDamage":0.12}}
+    ]},
+    {"seriesId":"helmet","equipSlot":2,"category":"armor","displayType":"头盔","affixPoolId":"non_weapon_affixes","baseFlat":{"defense":1,"maxHp":4},"stages":[
+      {"stage":1,"itemId":"ashbound_helmet_t1","prefix":"缚灰"},{"stage":5,"itemId":"gloomhide_helmet_t5","prefix":"幽皮"},{"stage":10,"itemId":"shadowiron_helmet_t10","prefix":"影铁","basePercent":{"critChance":0.01}},{"stage":15,"itemId":"nightglass_helmet_t15","prefix":"夜璃","basePercent":{"critChance":0.02,"critDamage":0.02}},{"stage":20,"itemId":"eclipseguard_helmet_t20","prefix":"蚀日卫","basePercent":{"critChance":0.03,"critDamage":0.03}},{"stage":25,"itemId":"voidforged_helmet_t25","prefix":"虚铸","basePercent":{"critChance":0.04,"critDamage":0.04}},{"stage":30,"itemId":"aeonblight_helmet_t30","prefix":"永劫蚀光","basePercent":{"critChance":0.05,"critDamage":0.05}}
+    ]},
+    {"seriesId":"chest","equipSlot":3,"category":"armor","displayType":"胸甲","affixPoolId":"non_weapon_affixes","baseFlat":{"defense":3,"maxHp":10},"stages":[
+      {"stage":1,"itemId":"ashbound_chest_t1","prefix":"缚灰"},{"stage":5,"itemId":"gloomhide_chest_t5","prefix":"幽皮"},{"stage":10,"itemId":"shadowiron_chest_t10","prefix":"影铁"},{"stage":15,"itemId":"nightglass_chest_t15","prefix":"夜璃","basePercent":{"critDamage":0.01}},{"stage":20,"itemId":"eclipseguard_chest_t20","prefix":"蚀日卫","basePercent":{"critDamage":0.02}},{"stage":25,"itemId":"voidforged_chest_t25","prefix":"虚铸","basePercent":{"critDamage":0.03}},{"stage":30,"itemId":"aeonblight_chest_t30","prefix":"永劫蚀光","basePercent":{"critDamage":0.04}}
+    ]},
+    {"seriesId":"gloves","equipSlot":0,"category":"armor","displayType":"手套","affixPoolId":"non_weapon_affixes","baseFlat":{"attack":2},"stages":[
+      {"stage":1,"itemId":"ashbound_gloves_t1","prefix":"缚灰","basePercent":{"attackSpeed":0.04}},{"stage":5,"itemId":"gloomhide_gloves_t5","prefix":"幽皮","basePercent":{"attackSpeed":0.05}},{"stage":10,"itemId":"shadowiron_gloves_t10","prefix":"影铁","basePercent":{"attackSpeed":0.06,"critChance":0.01}},{"stage":15,"itemId":"nightglass_gloves_t15","prefix":"夜璃","basePercent":{"attackSpeed":0.07,"critChance":0.02,"critDamage":0.02}},{"stage":20,"itemId":"eclipseguard_gloves_t20","prefix":"蚀日卫","basePercent":{"attackSpeed":0.08,"critChance":0.03,"critDamage":0.03}},{"stage":25,"itemId":"voidforged_gloves_t25","prefix":"虚铸","basePercent":{"attackSpeed":0.09,"critChance":0.04,"critDamage":0.04}},{"stage":30,"itemId":"aeonblight_gloves_t30","prefix":"永劫蚀光","basePercent":{"attackSpeed":0.10,"critChance":0.05,"critDamage":0.05}}
+    ]},
+    {"seriesId":"shoes","equipSlot":1,"category":"armor","displayType":"战靴","affixPoolId":"non_weapon_affixes","baseFlat":{"defense":1,"maxHp":4},"stages":[
+      {"stage":1,"itemId":"ashbound_shoes_t1","prefix":"缚灰"},{"stage":5,"itemId":"gloomhide_shoes_t5","prefix":"幽皮"},{"stage":10,"itemId":"shadowiron_shoes_t10","prefix":"影铁","basePercent":{"dodgeChance":0.01}},{"stage":15,"itemId":"nightglass_shoes_t15","prefix":"夜璃","basePercent":{"dodgeChance":0.02,"critDamage":0.01}},{"stage":20,"itemId":"eclipseguard_shoes_t20","prefix":"蚀日卫","basePercent":{"dodgeChance":0.03,"critDamage":0.02}},{"stage":25,"itemId":"voidforged_shoes_t25","prefix":"虚铸","basePercent":{"dodgeChance":0.04,"critDamage":0.03}},{"stage":30,"itemId":"aeonblight_shoes_t30","prefix":"永劫蚀光","basePercent":{"dodgeChance":0.05,"critDamage":0.04}}
+    ]},
+    {"seriesId":"cloak","equipSlot":5,"category":"armor","displayType":"披风","affixPoolId":"non_weapon_affixes","baseFlat":{"defense":1,"maxHp":5},"stages":[
+      {"stage":1,"itemId":"ashbound_cloak_t1","prefix":"缚灰"},{"stage":5,"itemId":"gloomhide_cloak_t5","prefix":"幽皮"},{"stage":10,"itemId":"shadowiron_cloak_t10","prefix":"影铁","basePercent":{"dodgeChance":0.01}},{"stage":15,"itemId":"nightglass_cloak_t15","prefix":"夜璃","basePercent":{"dodgeChance":0.02,"critDamage":0.01}},{"stage":20,"itemId":"eclipseguard_cloak_t20","prefix":"蚀日卫","basePercent":{"dodgeChance":0.03,"critDamage":0.02}},{"stage":25,"itemId":"voidforged_cloak_t25","prefix":"虚铸","basePercent":{"dodgeChance":0.04,"critDamage":0.03}},{"stage":30,"itemId":"aeonblight_cloak_t30","prefix":"永劫蚀光","basePercent":{"dodgeChance":0.05,"critDamage":0.04}}
+    ]},
+    {"seriesId":"accessory","equipSlot":7,"category":"accessory","displayType":"护符","affixPoolId":"non_weapon_affixes","baseFlat":{"attack":1,"maxHp":5},"stages":[
+      {"stage":1,"itemId":"ashbound_accessory_t1","prefix":"缚灰"},{"stage":5,"itemId":"gloomhide_accessory_t5","prefix":"幽皮"},{"stage":10,"itemId":"shadowiron_accessory_t10","prefix":"影铁","basePercent":{"critChance":0.01}},{"stage":15,"itemId":"nightglass_accessory_t15","prefix":"夜璃","basePercent":{"critChance":0.02,"critDamage":0.03}},{"stage":20,"itemId":"eclipseguard_accessory_t20","prefix":"蚀日卫","basePercent":{"critChance":0.03,"critDamage":0.04}},{"stage":25,"itemId":"voidforged_accessory_t25","prefix":"虚铸","basePercent":{"critChance":0.04,"critDamage":0.05}},{"stage":30,"itemId":"aeonblight_accessory_t30","prefix":"永劫蚀光","basePercent":{"critChance":0.05,"critDamage":0.06}}
+    ]}
+  ],
+  "mounts": [
+    {"itemId":"mount_carrion_scarab","displayName":"腐甲尸甲虫","equipSlot":6,"finalHpBps":500,"finalAtkBps":500,"moveSpeedBps":2500},
+    {"itemId":"mount_grimfang_wolf","displayName":"冷牙灰狼","equipSlot":6,"finalHpBps":500,"finalAtkBps":500,"moveSpeedBps":2500},
+    {"itemId":"mount_mire_tusker","displayName":"泥沼獠猪","equipSlot":6,"finalHpBps":500,"finalAtkBps":500,"moveSpeedBps":2500},
+    {"itemId":"mount_bramble_mane","displayName":"棘鬃战狼","equipSlot":6,"finalHpBps":500,"finalAtkBps":500,"moveSpeedBps":2500},
+    {"itemId":"mount_dreadhorn_ox","displayName":"恐角蛮牛","equipSlot":6,"finalHpBps":500,"finalAtkBps":500,"moveSpeedBps":2500}
+  ]
+}

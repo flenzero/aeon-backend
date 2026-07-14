@@ -1,14 +1,17 @@
 package economy
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/flenzero/aeon-backend/internal/chain"
 	"github.com/flenzero/aeon-backend/internal/platform/config"
 	"github.com/flenzero/aeon-backend/internal/platform/httpx"
+	"github.com/flenzero/aeon-backend/internal/platform/readiness"
 	"github.com/flenzero/aeon-backend/internal/platform/store"
 )
 
@@ -16,63 +19,105 @@ type Handler struct {
 	cfg     config.Config
 	service *Service
 	store   store.Repository
+	ready   readiness.Probe
 }
 
 func NewHandler(cfg config.Config, st store.Repository) *Handler {
-	return &Handler{cfg: cfg, service: NewService(cfg, st), store: st}
+	service := NewService(cfg, st)
+	checks := readiness.PersistenceChecks(cfg, st)
+	checks = append(checks, readiness.Required("economy-rules", service.Ready))
+	if cfg.StubMode == config.StubDisabled {
+		rpc := chain.NewHTTPClient(cfg.SolanaRPCURL)
+		checks = append(checks, readiness.Required("solana-rpc", func(ctx context.Context) error {
+			_, err := rpc.GetSlot(ctx)
+			return err
+		}))
+	}
+	return &Handler{cfg: cfg, service: service, store: st, ready: readiness.New(cfg.ServiceName, checks...)}
 }
 
 func (h *Handler) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", httpx.Health(h.cfg.ServiceName))
-	mux.HandleFunc("GET /api/economy/snapshot", httpx.RequireInternal(h.cfg, h.snapshot))
-	mux.HandleFunc("POST /api/economy/warehouse/deposit", httpx.RequireInternal(h.cfg, h.warehouseDeposit))
-	mux.HandleFunc("POST /api/economy/warehouse/withdraw", httpx.RequireInternal(h.cfg, h.warehouseWithdraw))
-	mux.HandleFunc("POST /api/economy/equipment/equip", httpx.RequireInternal(h.cfg, h.equipItem))
-	mux.HandleFunc("POST /api/economy/equipment/unequip", httpx.RequireInternal(h.cfg, h.unequipItem))
-	mux.HandleFunc("POST /api/economy/equipment/repair", httpx.RequireInternal(h.cfg, h.equipmentRepair))
-	mux.HandleFunc("POST /api/economy/nft/mint/request", httpx.RequireInternal(h.cfg, h.nftMintRequest))
-	mux.HandleFunc("POST /api/economy/nft/mint/cancel", httpx.RequireInternal(h.cfg, h.nftMintCancel))
-	mux.HandleFunc("POST /api/economy/internal/nft/mint/confirm", httpx.RequireInternal(h.cfg, h.nftMintConfirm))
-	mux.HandleFunc("GET /api/economy/nft/assets", httpx.RequireInternal(h.cfg, h.nftListAssets))
-	mux.HandleFunc("POST /api/economy/dungeon/enter", httpx.RequireInternal(h.cfg, h.dungeonEnter))
-	mux.HandleFunc("POST /api/economy/dungeon/finish", httpx.RequireInternal(h.cfg, h.dungeonFinish))
-	mux.HandleFunc("POST /api/economy/loot/claim-player", httpx.RequireInternal(h.cfg, h.lootClaim))
-	mux.HandleFunc("POST /api/economy/loot/claim-all", httpx.RequireInternal(h.cfg, h.lootClaimAll))
-	mux.HandleFunc("POST /api/economy/loot/discard", httpx.RequireInternal(h.cfg, h.lootDiscard))
-	mux.HandleFunc("POST /api/economy/gathering/settle", httpx.RequireInternal(h.cfg, h.gatheringSettle))
-	mux.HandleFunc("POST /api/economy/farming/harvest", httpx.RequireInternal(h.cfg, h.farmingHarvest))
-	mux.HandleFunc("POST /api/economy/boss/contribute", httpx.RequireInternal(h.cfg, h.bossContribute))
-	mux.HandleFunc("POST /api/economy/boss/settle", httpx.RequireInternal(h.cfg, h.bossSettle))
-	mux.HandleFunc("POST /api/economy/internal/boss/events/open", httpx.RequireInternal(h.cfg, h.bossOpenEvent))
-	mux.HandleFunc("POST /api/economy/internal/boss/events/close", httpx.RequireInternal(h.cfg, h.bossCloseEvent))
-	mux.HandleFunc("POST /api/economy/internal/boss/events/settle", httpx.RequireInternal(h.cfg, h.bossMarkSettled))
-	mux.HandleFunc("GET /api/economy/internal/boss/events/active", httpx.RequireInternal(h.cfg, h.bossListActiveEvents))
-	mux.HandleFunc("POST /api/economy/inventory/organize", httpx.RequireInternal(h.cfg, h.inventoryOrganize))
-	mux.HandleFunc("POST /api/economy/warehouse/organize", httpx.RequireInternal(h.cfg, h.warehouseOrganize))
-	mux.HandleFunc("POST /api/economy/inventory/discard", httpx.RequireInternal(h.cfg, h.inventoryDiscard))
-	mux.HandleFunc("POST /api/economy/inventory/synthesize", httpx.RequireInternal(h.cfg, h.inventorySynthesize))
-	mux.HandleFunc("POST /api/economy/inventory/bag/expand", httpx.RequireInternal(h.cfg, h.bagExpand))
-	mux.HandleFunc("POST /api/economy/license/purchase", httpx.RequireInternal(h.cfg, h.licensePurchase))
-	mux.HandleFunc("GET /api/economy/marketplace/listings", httpx.RequireInternal(h.cfg, h.marketplaceListings))
-	mux.HandleFunc("GET /api/economy/marketplace/listings/mine", httpx.RequireInternal(h.cfg, h.marketplaceMyListings))
-	mux.HandleFunc("GET /api/economy/marketplace/slots", httpx.RequireInternal(h.cfg, h.marketplaceSlots))
-	mux.HandleFunc("POST /api/economy/marketplace/list", httpx.RequireInternal(h.cfg, h.marketplaceList))
-	mux.HandleFunc("POST /api/economy/marketplace/listings/{listingId}/buy", httpx.RequireInternal(h.cfg, h.marketplaceBuy))
-	mux.HandleFunc("POST /api/economy/marketplace/listings/{listingId}/cancel", httpx.RequireInternal(h.cfg, h.marketplaceCancel))
-	mux.HandleFunc("POST /api/economy/marketplace/slots/expand-material", httpx.RequireInternal(h.cfg, h.marketplaceExpandMaterial))
-	mux.HandleFunc("POST /api/economy/marketplace/slots/expand-wallet", httpx.RequireInternal(h.cfg, h.marketplaceExpandWallet))
-	mux.HandleFunc("POST /api/economy/marketplace/slots/expand-wallet/submit", httpx.RequireInternal(h.cfg, h.marketplaceExpandWalletSubmit))
-	mux.HandleFunc("POST /api/economy/internal/payments/submit", httpx.RequireInternal(h.cfg, h.marketplaceExpandWalletSubmit))
-	mux.HandleFunc("POST /api/economy/rewards/grant-locked", httpx.RequireInternal(h.cfg, h.grantLocked))
-	mux.HandleFunc("POST /api/chain/token/claim", httpx.RequireInternal(h.cfg, h.requestWithdrawal))
-	mux.HandleFunc("GET /api/chain/token/ledger", httpx.RequireInternal(h.cfg, h.ledger))
-	mux.HandleFunc("POST /api/economy/internal/unlocks/settle", httpx.RequireInternal(h.cfg, h.settleUnlocks))
-	mux.HandleFunc("POST /api/economy/internal/withdrawals/process", httpx.RequireInternal(h.cfg, h.processWithdrawals))
-	mux.HandleFunc("POST /api/economy/internal/chain/deposits/scan", httpx.RequireInternal(h.cfg, h.scanDeposits))
-	mux.HandleFunc("POST /api/economy/internal/chain/payouts/submit", httpx.RequireInternal(h.cfg, h.submitPayouts))
-	mux.HandleFunc("POST /api/economy/internal/chain/payouts/confirm", httpx.RequireInternal(h.cfg, h.confirmPayouts))
-	mux.HandleFunc("POST /api/economy/internal/payments/confirm", httpx.RequireInternal(h.cfg, h.confirmPayment))
+	mux.Handle("GET /ready", h.ready.Handler())
+	gameplay := func(next http.HandlerFunc) http.HandlerFunc {
+		return httpx.RequireService(h.cfg, h.store, "economy.gameplay", next)
+	}
+	worker := func(next http.HandlerFunc) http.HandlerFunc {
+		return httpx.RequireService(h.cfg, h.store, "economy.worker", next)
+	}
+	mint := func(next http.HandlerFunc) http.HandlerFunc {
+		return httpx.RequireService(h.cfg, h.store, "economy.mint", next)
+	}
+	bossOps := func(next http.HandlerFunc) http.HandlerFunc {
+		return httpx.RequireService(h.cfg, h.store, "economy.boss_ops", next)
+	}
+	rewards := func(next http.HandlerFunc) http.HandlerFunc {
+		return httpx.RequireService(h.cfg, h.store, "economy.rewards", next)
+	}
+	payments := func(next http.HandlerFunc) http.HandlerFunc {
+		return httpx.RequireService(h.cfg, h.store, "economy.payments", next)
+	}
+	mux.HandleFunc("GET /api/economy/snapshot", gameplay(h.snapshot))
+	mux.HandleFunc("POST /api/economy/warehouse/deposit", gameplay(h.warehouseDeposit))
+	mux.HandleFunc("POST /api/economy/warehouse/withdraw", gameplay(h.warehouseWithdraw))
+	mux.HandleFunc("POST /api/economy/equipment/equip", gameplay(h.equipItem))
+	mux.HandleFunc("POST /api/economy/equipment/unequip", gameplay(h.unequipItem))
+	mux.HandleFunc("POST /api/economy/equipment/repair", gameplay(h.equipmentRepair))
+	mux.HandleFunc("POST /api/economy/equipment/enhance", gameplay(h.equipmentEnhance))
+	mux.HandleFunc("POST /api/economy/equipment/npc-recycle", gameplay(h.equipmentNPCRecycle))
+	mux.HandleFunc("POST /api/economy/lottery/draw", gameplay(h.lotteryDraw))
+	mux.HandleFunc("GET /api/economy/bounty/board", gameplay(h.bountyBoard))
+	mux.HandleFunc("POST /api/economy/bounty/slots/unlock-gold", gameplay(h.bountyUnlockGold))
+	mux.HandleFunc("POST /api/economy/bounty/slots/unlock-aeb", gameplay(h.bountyUnlockAEB))
+	mux.HandleFunc("POST /api/economy/bounty/refresh", gameplay(h.bountyRefresh))
+	mux.HandleFunc("POST /api/economy/bounty/progress/combat", gameplay(h.bountyCombatProgress))
+	mux.HandleFunc("POST /api/economy/bounty/submit-equipment", gameplay(h.bountySubmitEquipment))
+	mux.HandleFunc("POST /api/economy/bounty/claim", gameplay(h.bountyClaim))
+	mux.HandleFunc("POST /api/economy/bounty/badges/draw", gameplay(h.bountyBadgeDraw))
+	mux.HandleFunc("POST /api/economy/nft/mint/request", gameplay(h.nftMintRequest))
+	mux.HandleFunc("POST /api/economy/nft/mint/cancel", gameplay(h.nftMintCancel))
+	mux.HandleFunc("POST /api/economy/internal/nft/mint/confirm", mint(h.nftMintConfirm))
+	mux.HandleFunc("GET /api/economy/nft/assets", gameplay(h.nftListAssets))
+	mux.HandleFunc("POST /api/economy/dungeon/enter", gameplay(h.dungeonEnter))
+	mux.HandleFunc("POST /api/economy/dungeon/finish", gameplay(h.dungeonFinish))
+	mux.HandleFunc("POST /api/economy/loot/claim-player", gameplay(h.lootClaim))
+	mux.HandleFunc("POST /api/economy/loot/claim-all", gameplay(h.lootClaimAll))
+	mux.HandleFunc("POST /api/economy/loot/discard", gameplay(h.lootDiscard))
+	mux.HandleFunc("POST /api/economy/gathering/settle", gameplay(h.gatheringSettle))
+	mux.HandleFunc("POST /api/economy/farming/harvest", gameplay(h.farmingHarvest))
+	mux.HandleFunc("POST /api/economy/boss/contribute", gameplay(h.bossContribute))
+	mux.HandleFunc("POST /api/economy/boss/settle", gameplay(h.bossSettle))
+	mux.HandleFunc("POST /api/economy/internal/boss/events/open", bossOps(h.bossOpenEvent))
+	mux.HandleFunc("POST /api/economy/internal/boss/events/close", bossOps(h.bossCloseEvent))
+	mux.HandleFunc("POST /api/economy/internal/boss/events/settle", bossOps(h.bossMarkSettled))
+	mux.HandleFunc("GET /api/economy/internal/boss/events/active", bossOps(h.bossListActiveEvents))
+	mux.HandleFunc("POST /api/economy/inventory/organize", gameplay(h.inventoryOrganize))
+	mux.HandleFunc("POST /api/economy/warehouse/organize", gameplay(h.warehouseOrganize))
+	mux.HandleFunc("POST /api/economy/inventory/discard", gameplay(h.inventoryDiscard))
+	mux.HandleFunc("POST /api/economy/inventory/synthesize", gameplay(h.inventorySynthesize))
+	mux.HandleFunc("POST /api/economy/inventory/bag/expand", gameplay(h.bagExpand))
+	mux.HandleFunc("POST /api/economy/license/purchase", gameplay(h.licensePurchase))
+	mux.HandleFunc("GET /api/economy/marketplace/listings", gameplay(h.marketplaceListings))
+	mux.HandleFunc("GET /api/economy/marketplace/listings/mine", gameplay(h.marketplaceMyListings))
+	mux.HandleFunc("GET /api/economy/marketplace/slots", gameplay(h.marketplaceSlots))
+	mux.HandleFunc("POST /api/economy/marketplace/list", gameplay(h.marketplaceList))
+	mux.HandleFunc("POST /api/economy/marketplace/listings/{listingId}/buy", gameplay(h.marketplaceBuy))
+	mux.HandleFunc("POST /api/economy/marketplace/listings/{listingId}/cancel", gameplay(h.marketplaceCancel))
+	mux.HandleFunc("POST /api/economy/marketplace/slots/expand-material", gameplay(h.marketplaceExpandMaterial))
+	mux.HandleFunc("POST /api/economy/marketplace/slots/expand-wallet", gameplay(h.marketplaceExpandWallet))
+	mux.HandleFunc("POST /api/economy/marketplace/slots/expand-wallet/submit", gameplay(h.marketplaceExpandWalletSubmit))
+	mux.HandleFunc("POST /api/economy/internal/payments/submit", payments(h.marketplaceExpandWalletSubmit))
+	mux.HandleFunc("POST /api/economy/rewards/grant-locked", rewards(h.grantLocked))
+	mux.HandleFunc("POST /api/chain/token/claim", gameplay(h.requestWithdrawal))
+	mux.HandleFunc("GET /api/chain/token/ledger", gameplay(h.ledger))
+	mux.HandleFunc("POST /api/economy/internal/unlocks/settle", worker(h.settleUnlocks))
+	mux.HandleFunc("POST /api/economy/internal/withdrawals/process", worker(h.processWithdrawals))
+	mux.HandleFunc("POST /api/economy/internal/chain/deposits/scan", worker(h.scanDeposits))
+	mux.HandleFunc("POST /api/economy/internal/chain/payouts/submit", worker(h.submitPayouts))
+	mux.HandleFunc("POST /api/economy/internal/chain/payouts/confirm", worker(h.confirmPayouts))
+	mux.HandleFunc("POST /api/economy/internal/equipment/npc-recycle/purge", worker(h.purgeNPCRecycledEquipment))
+	mux.HandleFunc("POST /api/economy/internal/payments/confirm", payments(h.confirmPayment))
 	return httpx.Recover(httpx.WithCORS(mux))
 }
 
@@ -242,6 +287,337 @@ func (h *Handler) equipmentRepair(w http.ResponseWriter, r *http.Request) {
 	httpx.OK(w, result)
 }
 
+func (h *Handler) equipmentEnhance(w http.ResponseWriter, r *http.Request) {
+	accountID, err := httpx.AccountID(r)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 2006, err.Error())
+		return
+	}
+	var body struct {
+		OpID         string `json:"opId"`
+		CharacterID  int64  `json:"characterId"`
+		EquipmentUID string `json:"equipmentUid"`
+	}
+	if !httpx.Decode(r, &body) {
+		httpx.Error(w, http.StatusBadRequest, 400, "invalid JSON body")
+		return
+	}
+	characterID := body.CharacterID
+	if characterID == 0 {
+		characterID, err = httpx.CharacterID(r)
+		if err != nil {
+			httpx.Error(w, http.StatusBadRequest, 2007, err.Error())
+			return
+		}
+	}
+	result, err := h.service.EquipmentEnhance(body.OpID, accountID, characterID, body.EquipmentUID)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 3602, err.Error())
+		return
+	}
+	httpx.OK(w, result)
+}
+
+func (h *Handler) equipmentNPCRecycle(w http.ResponseWriter, r *http.Request) {
+	accountID, err := httpx.AccountID(r)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 2006, err.Error())
+		return
+	}
+	var body struct {
+		OpID         string `json:"opId"`
+		CharacterID  int64  `json:"characterId"`
+		EquipmentUID string `json:"equipmentUid"`
+	}
+	if !httpx.Decode(r, &body) {
+		httpx.Error(w, http.StatusBadRequest, 400, "invalid JSON body")
+		return
+	}
+	characterID := body.CharacterID
+	if characterID == 0 {
+		characterID, err = httpx.CharacterID(r)
+		if err != nil {
+			httpx.Error(w, http.StatusBadRequest, 2007, err.Error())
+			return
+		}
+	}
+	result, err := h.service.EquipmentNPCRecycle(body.OpID, accountID, characterID, body.EquipmentUID)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 3603, err.Error())
+		return
+	}
+	httpx.OK(w, result)
+}
+
+func (h *Handler) lotteryDraw(w http.ResponseWriter, r *http.Request) {
+	accountID, err := httpx.AccountID(r)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 2006, err.Error())
+		return
+	}
+	var body struct {
+		OpID        string `json:"opId"`
+		CharacterID int64  `json:"characterId"`
+		Count       int    `json:"count"`
+	}
+	if !httpx.Decode(r, &body) {
+		httpx.Error(w, http.StatusBadRequest, 400, "invalid JSON body")
+		return
+	}
+	if body.CharacterID == 0 {
+		body.CharacterID, err = httpx.CharacterID(r)
+		if err != nil {
+			httpx.Error(w, http.StatusBadRequest, 2007, err.Error())
+			return
+		}
+	}
+	result, err := h.service.CreateLotteryPayment(body.OpID, accountID, body.CharacterID, body.Count)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 3610, err.Error())
+		return
+	}
+	httpx.Created(w, result)
+}
+
+func bountyCharacterID(r *http.Request, requested int64) (int64, error) {
+	if requested != 0 {
+		return requested, nil
+	}
+	return httpx.CharacterID(r)
+}
+func (h *Handler) bountyBoard(w http.ResponseWriter, r *http.Request) {
+	accountID, err := httpx.AccountID(r)
+	if err != nil {
+		httpx.Error(w, 400, 2006, err.Error())
+		return
+	}
+	characterID, err := httpx.CharacterID(r)
+	if err != nil {
+		httpx.Error(w, 400, 2007, err.Error())
+		return
+	}
+	result, err := h.service.BountyBoard(accountID, characterID)
+	if err != nil {
+		httpx.Error(w, 400, 3620, err.Error())
+		return
+	}
+	httpx.OK(w, result)
+}
+func (h *Handler) bountyUnlockGold(w http.ResponseWriter, r *http.Request) {
+	accountID, err := httpx.AccountID(r)
+	if err != nil {
+		httpx.Error(w, 400, 2006, err.Error())
+		return
+	}
+	var b struct {
+		OpID        string `json:"opId"`
+		CharacterID int64  `json:"characterId"`
+	}
+	if !httpx.Decode(r, &b) {
+		httpx.Error(w, 400, 400, "invalid JSON body")
+		return
+	}
+	characterID, err := bountyCharacterID(r, b.CharacterID)
+	if err != nil {
+		httpx.Error(w, 400, 2007, err.Error())
+		return
+	}
+	result, err := h.service.UnlockBountyGoldSlot(b.OpID, accountID, characterID)
+	if err != nil {
+		httpx.Error(w, 400, 3621, err.Error())
+		return
+	}
+	httpx.OK(w, result)
+}
+func (h *Handler) bountyUnlockAEB(w http.ResponseWriter, r *http.Request) {
+	accountID, err := httpx.AccountID(r)
+	if err != nil {
+		httpx.Error(w, 400, 2006, err.Error())
+		return
+	}
+	var b struct {
+		OpID        string `json:"opId"`
+		CharacterID int64  `json:"characterId"`
+		SlotIndex   int    `json:"slotIndex"`
+	}
+	if !httpx.Decode(r, &b) {
+		httpx.Error(w, 400, 400, "invalid JSON body")
+		return
+	}
+	characterID, err := bountyCharacterID(r, b.CharacterID)
+	if err != nil {
+		httpx.Error(w, 400, 2007, err.Error())
+		return
+	}
+	result, err := h.service.CreateBountySlotPayment(b.OpID, accountID, characterID, b.SlotIndex)
+	if err != nil {
+		httpx.Error(w, 400, 3622, err.Error())
+		return
+	}
+	httpx.Created(w, result)
+}
+func (h *Handler) bountyRefresh(w http.ResponseWriter, r *http.Request) {
+	accountID, err := httpx.AccountID(r)
+	if err != nil {
+		httpx.Error(w, 400, 2006, err.Error())
+		return
+	}
+	var b struct {
+		OpID        string `json:"opId"`
+		CharacterID int64  `json:"characterId"`
+		Mode        string `json:"mode"`
+	}
+	if !httpx.Decode(r, &b) {
+		httpx.Error(w, 400, 400, "invalid JSON body")
+		return
+	}
+	characterID, err := bountyCharacterID(r, b.CharacterID)
+	if err != nil {
+		httpx.Error(w, 400, 2007, err.Error())
+		return
+	}
+	board, order, err := h.service.RefreshBounty(b.OpID, accountID, characterID, b.Mode)
+	if err != nil {
+		httpx.Error(w, 400, 3623, err.Error())
+		return
+	}
+	if order != nil {
+		httpx.Created(w, map[string]any{"order": order})
+		return
+	}
+	httpx.OK(w, board)
+}
+func (h *Handler) bountyCombatProgress(w http.ResponseWriter, r *http.Request) {
+	accountID, err := httpx.AccountID(r)
+	if err != nil {
+		httpx.Error(w, 400, 2006, err.Error())
+		return
+	}
+	var b struct {
+		OpID         string `json:"opId"`
+		CharacterID  int64  `json:"characterId"`
+		DungeonRunID string `json:"dungeonRunId"`
+	}
+	if !httpx.Decode(r, &b) {
+		httpx.Error(w, 400, 400, "invalid JSON body")
+		return
+	}
+	serverID := gameplayServerID(r)
+	if serverID == "" {
+		httpx.Error(w, 403, 4030, "combat progress requires a game server identity")
+		return
+	}
+	characterID, err := bountyCharacterID(r, b.CharacterID)
+	if err != nil {
+		httpx.Error(w, 400, 2007, err.Error())
+		return
+	}
+	tasks, err := h.service.ProgressBountyCombat(b.OpID, accountID, characterID, b.DungeonRunID, serverID)
+	if err != nil {
+		httpx.Error(w, 400, 3624, err.Error())
+		return
+	}
+	httpx.OK(w, map[string]any{"tasks": tasks})
+}
+func (h *Handler) bountySubmitEquipment(w http.ResponseWriter, r *http.Request) {
+	accountID, err := httpx.AccountID(r)
+	if err != nil {
+		httpx.Error(w, 400, 2006, err.Error())
+		return
+	}
+	var b struct {
+		OpID         string `json:"opId"`
+		CharacterID  int64  `json:"characterId"`
+		SlotIndex    int    `json:"slotIndex"`
+		EquipmentUID string `json:"equipmentUid"`
+	}
+	if !httpx.Decode(r, &b) {
+		httpx.Error(w, 400, 400, "invalid JSON body")
+		return
+	}
+	characterID, err := bountyCharacterID(r, b.CharacterID)
+	if err != nil {
+		httpx.Error(w, 400, 2007, err.Error())
+		return
+	}
+	result, err := h.service.SubmitBountyEquipment(b.OpID, accountID, characterID, b.SlotIndex, b.EquipmentUID)
+	if err != nil {
+		httpx.Error(w, 400, 3625, err.Error())
+		return
+	}
+	httpx.OK(w, result)
+}
+func (h *Handler) bountyClaim(w http.ResponseWriter, r *http.Request) {
+	accountID, err := httpx.AccountID(r)
+	if err != nil {
+		httpx.Error(w, 400, 2006, err.Error())
+		return
+	}
+	var b struct {
+		OpID        string `json:"opId"`
+		CharacterID int64  `json:"characterId"`
+		SlotIndex   int    `json:"slotIndex"`
+	}
+	if !httpx.Decode(r, &b) {
+		httpx.Error(w, 400, 400, "invalid JSON body")
+		return
+	}
+	characterID, err := bountyCharacterID(r, b.CharacterID)
+	if err != nil {
+		httpx.Error(w, 400, 2007, err.Error())
+		return
+	}
+	result, err := h.service.ClaimBounty(b.OpID, accountID, characterID, b.SlotIndex)
+	if err != nil {
+		httpx.Error(w, 400, 3626, err.Error())
+		return
+	}
+	httpx.OK(w, result)
+}
+func (h *Handler) bountyBadgeDraw(w http.ResponseWriter, r *http.Request) {
+	accountID, err := httpx.AccountID(r)
+	if err != nil {
+		httpx.Error(w, 400, 2006, err.Error())
+		return
+	}
+	var b struct {
+		OpID        string `json:"opId"`
+		CharacterID int64  `json:"characterId"`
+		Badge       string `json:"badge"`
+	}
+	if !httpx.Decode(r, &b) {
+		httpx.Error(w, 400, 400, "invalid JSON body")
+		return
+	}
+	characterID, err := bountyCharacterID(r, b.CharacterID)
+	if err != nil {
+		httpx.Error(w, 400, 2007, err.Error())
+		return
+	}
+	result, err := h.service.DrawBountyBadge(b.OpID, accountID, characterID, b.Badge)
+	if err != nil {
+		httpx.Error(w, 400, 3627, err.Error())
+		return
+	}
+	httpx.OK(w, result)
+}
+
+func (h *Handler) purgeNPCRecycledEquipment(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Limit int `json:"limit"`
+	}
+	if !httpx.Decode(r, &body) {
+		httpx.Error(w, http.StatusBadRequest, 400, "invalid JSON body")
+		return
+	}
+	count, err := h.service.PurgeExpiredNPCRecycledEquipment(time.Now().UTC(), body.Limit)
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, 5601, err.Error())
+		return
+	}
+	httpx.OK(w, map[string]any{"purged": count})
+}
+
 func (h *Handler) nftMintRequest(w http.ResponseWriter, r *http.Request) {
 	accountID, err := httpx.AccountID(r)
 	if err != nil {
@@ -298,6 +674,10 @@ func (h *Handler) nftMintCancel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) nftMintConfirm(w http.ResponseWriter, r *http.Request) {
+	if h.cfg.StubMode == config.StubDisabled {
+		httpx.Error(w, http.StatusServiceUnavailable, 3903, "Metaplex Core mint verification adapter is not configured")
+		return
+	}
 	var body struct {
 		OpID        string `json:"opId"`
 		RequestID   int64  `json:"requestId"`
@@ -353,10 +733,19 @@ func (h *Handler) dungeonEnter(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	serverID := gameplayServerID(r)
+	if serverID != "" {
+		online, err := h.store.GetOnlineSession(accountID)
+		if err != nil || online.ServerID != serverID || online.CharacterID != characterID {
+			httpx.Error(w, http.StatusForbidden, 3100, "player is not online on the calling game server")
+			return
+		}
+	}
 	result, err := h.service.DungeonEnter(store.DungeonEnterRequest{
 		OpID:        body.OpID,
 		AccountID:   accountID,
 		CharacterID: characterID,
+		ServerID:    serverID,
 		ChapterID:   body.ChapterID,
 		FloorID:     body.FloorID,
 	})
@@ -391,6 +780,7 @@ func (h *Handler) dungeonFinish(w http.ResponseWriter, r *http.Request) {
 		AccountID:    accountID,
 		CharacterID:  characterID,
 		DungeonRunID: body.DungeonRunID,
+		ServerID:     gameplayServerID(r),
 		ChapterID:    body.ChapterID,
 		FloorID:      body.FloorID,
 		Result:       body.Result,
@@ -403,6 +793,20 @@ func (h *Handler) dungeonFinish(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.OK(w, result)
+}
+
+func gameplayServerID(r *http.Request) string {
+	identity, ok := httpx.ContextServiceIdentity(r)
+	if !ok {
+		return ""
+	}
+	if identity.Kind == "GAME_SERVER" {
+		return strings.TrimSpace(identity.SubjectID)
+	}
+	if identity.Kind == "LEGACY" {
+		return strings.TrimSpace(r.Header.Get("X-Game-Server-Id"))
+	}
+	return ""
 }
 
 func (h *Handler) lootClaim(w http.ResponseWriter, r *http.Request) {
@@ -883,8 +1287,11 @@ func (h *Handler) licensePurchase(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) marketplaceListings(w http.ResponseWriter, r *http.Request) {
-	limit := queryInt(r, "limit", 20)
-	offset := queryInt(r, "offset", 0)
+	limit, offset, err := httpx.Pagination(r, 20, 100)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 400, err.Error())
+		return
+	}
 	items, err := h.service.MarketplaceListListings(store.MarketplaceListFilter{
 		Status:    r.URL.Query().Get("status"),
 		AssetType: r.URL.Query().Get("assetType"),
@@ -905,8 +1312,11 @@ func (h *Handler) marketplaceMyListings(w http.ResponseWriter, r *http.Request) 
 		httpx.Error(w, http.StatusBadRequest, 2006, err.Error())
 		return
 	}
-	limit := queryInt(r, "limit", 50)
-	offset := queryInt(r, "offset", 0)
+	limit, offset, err := httpx.Pagination(r, 50, 100)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 400, err.Error())
+		return
+	}
 	items, err := h.service.MarketplaceMyListings(accountID, r.URL.Query().Get("status"), limit, offset)
 	if err != nil {
 		httpx.Error(w, http.StatusBadRequest, 3702, err.Error())
@@ -1133,6 +1543,9 @@ func (h *Handler) marketplaceExpandWalletSubmit(w http.ResponseWriter, r *http.R
 }
 
 func (h *Handler) scanDeposits(w http.ResponseWriter, r *http.Request) {
+	if !decodeEmptyCommand(w, r) {
+		return
+	}
 	result, err := h.service.ScanDeposits()
 	if err != nil {
 		httpx.Error(w, http.StatusBadRequest, 3801, err.Error())
@@ -1142,6 +1555,9 @@ func (h *Handler) scanDeposits(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) submitPayouts(w http.ResponseWriter, r *http.Request) {
+	if !decodeEmptyCommand(w, r) {
+		return
+	}
 	result, err := h.service.SubmitPayouts(50)
 	if err != nil {
 		httpx.Error(w, http.StatusBadRequest, 3802, err.Error())
@@ -1151,6 +1567,9 @@ func (h *Handler) submitPayouts(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) confirmPayouts(w http.ResponseWriter, r *http.Request) {
+	if !decodeEmptyCommand(w, r) {
+		return
+	}
 	result, err := h.service.ConfirmPayouts(50)
 	if err != nil {
 		httpx.Error(w, http.StatusBadRequest, 3803, err.Error())
@@ -1171,18 +1590,6 @@ func (h *Handler) confirmPayment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.OK(w, order)
-}
-
-func queryInt(r *http.Request, key string, fallback int) int {
-	raw := strings.TrimSpace(r.URL.Query().Get(key))
-	if raw == "" {
-		return fallback
-	}
-	var value int
-	if _, err := fmt.Sscanf(raw, "%d", &value); err != nil {
-		return fallback
-	}
-	return value
 }
 
 func pathInt64(r *http.Request, key string) (int64, error) {
@@ -1295,10 +1702,25 @@ func (h *Handler) ledger(w http.ResponseWriter, r *http.Request) {
 	httpx.OK(w, map[string]any{"entries": h.store.Ledger(accountID)})
 }
 
-func (h *Handler) settleUnlocks(w http.ResponseWriter, _ *http.Request) {
+func (h *Handler) settleUnlocks(w http.ResponseWriter, r *http.Request) {
+	if !decodeEmptyCommand(w, r) {
+		return
+	}
 	httpx.OK(w, map[string]any{"settled": h.service.SettleUnlocks(100)})
 }
 
-func (h *Handler) processWithdrawals(w http.ResponseWriter, _ *http.Request) {
+func (h *Handler) processWithdrawals(w http.ResponseWriter, r *http.Request) {
+	if !decodeEmptyCommand(w, r) {
+		return
+	}
 	httpx.OK(w, map[string]any{"processed": h.service.ProcessWithdrawals(20)})
+}
+
+func decodeEmptyCommand(w http.ResponseWriter, r *http.Request) bool {
+	var body struct{}
+	if !httpx.Decode(r, &body) {
+		httpx.Error(w, http.StatusBadRequest, 400, "invalid JSON body")
+		return false
+	}
+	return true
 }

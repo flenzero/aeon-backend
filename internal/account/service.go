@@ -2,6 +2,7 @@ package account
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -56,6 +57,15 @@ type LaunchResult struct {
 	Ticket    string    `json:"ticket"`
 	ExpiresAt time.Time `json:"expiresAt"`
 	ServerID  string    `json:"serverId,omitempty"`
+}
+
+type DungeonRecoveryDecision struct {
+	Action       string    `json:"action"`
+	Status       string    `json:"status"`
+	DungeonRunID string    `json:"dungeonRunId"`
+	ServerID     string    `json:"serverId,omitempty"`
+	Ticket       string    `json:"ticket,omitempty"`
+	ExpiresAt    time.Time `json:"expiresAt,omitempty"`
 }
 
 type WalletNonceResult struct {
@@ -131,6 +141,17 @@ func (s *Service) Launch(accountID, characterID int64, sessionID, serverID strin
 	}
 	if _, ok := s.store.Character(accountID, characterID); !ok {
 		return LaunchResult{}, errors.New("character not found")
+	}
+	if recovery, err := s.store.ActiveDungeonRun(accountID, characterID); err == nil {
+		originServerID := strings.TrimSpace(recovery.ServerID)
+		if originServerID == "" {
+			return LaunchResult{}, errors.New("active dungeon origin server is unavailable; abandon the dungeon first")
+		}
+		if strings.TrimSpace(serverID) != originServerID {
+			return LaunchResult{}, fmt.Errorf("active dungeon must reconnect to server %s or be abandoned", originServerID)
+		}
+	} else if !errors.Is(err, store.ErrNotFound) {
+		return LaunchResult{}, err
 	}
 	if err := s.RequireActiveSession(sessionID, accountID); err != nil {
 		return LaunchResult{}, err

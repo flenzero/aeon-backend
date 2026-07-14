@@ -1,0 +1,187 @@
+name: ${COMPOSE_PROJECT_NAME:-aeonblight}
+
+x-app-build: &app-build
+  context: ${AEON_BUILD_CONTEXT:-.}
+  dockerfile: ${AEON_DOCKERFILE:-deploy/Dockerfile}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+    ports:
+      - "${POSTGRES_BIND:-127.0.0.1}:${POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command:
+      - sh
+      - -c
+      - |
+        if [ -n "$${REDIS_PASSWORD}" ]; then
+          exec redis-server --appendonly yes --requirepass "$${REDIS_PASSWORD}"
+        fi
+        exec redis-server --appendonly yes
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+    ports:
+      - "${REDIS_BIND:-127.0.0.1}:${REDIS_PORT:-56379}:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "if [ -n \"$${REDIS_PASSWORD}\" ]; then redis-cli -a \"$${REDIS_PASSWORD}\" ping; else redis-cli ping; fi"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  account-api:
+    build:
+      <<: *app-build
+      args:
+        SERVICE: account-api
+    image: ${ACCOUNT_API_IMAGE:-aeonblight/account-api}:${IMAGE_TAG:-latest}
+    environment:
+      APP_PROFILE: ${APP_PROFILE:-production}
+      TEST_SCOPE: ${TEST_SCOPE:-contract}
+      STUB_MODE: ${STUB_MODE:-disabled}
+      ALLOW_REDIS_FALLBACK: "false"
+      AEONBLIGHT_SKIP_LOCAL_ENV: "true"
+      ADDR: ":8081"
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      REQUIRED_SCHEMA_VERSION: ${REQUIRED_SCHEMA_VERSION:?REQUIRED_SCHEMA_VERSION is required}
+      INTERNAL_KEY: ${INTERNAL_KEY:-}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      REDIS_ENABLED: ${REDIS_ENABLED:-true}
+      REDIS_ADDR: ${REDIS_ADDR:-redis:6379}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
+      REDIS_DB: ${REDIS_DB:-0}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-168}
+      ONLINE_PRESENCE_TTL_SECONDS: ${ONLINE_PRESENCE_TTL_SECONDS:-90}
+    ports:
+      - "${ACCOUNT_API_BIND:-127.0.0.1}:${ACCOUNT_API_PORT:-8081}:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8081/ready >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  economy-api:
+    build:
+      <<: *app-build
+      args:
+        SERVICE: economy-api
+    image: ${ECONOMY_API_IMAGE:-aeonblight/economy-api}:${IMAGE_TAG:-latest}
+    environment:
+      APP_PROFILE: ${APP_PROFILE:-production}
+      TEST_SCOPE: ${TEST_SCOPE:-contract}
+      STUB_MODE: ${STUB_MODE:-disabled}
+      AEONBLIGHT_SKIP_LOCAL_ENV: "true"
+      ADDR: ":8082"
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      REQUIRED_SCHEMA_VERSION: ${REQUIRED_SCHEMA_VERSION:?REQUIRED_SCHEMA_VERSION is required}
+      ECONOMY_CONFIG_DIR: "/app/configs/economy"
+      INTERNAL_KEY: ${INTERNAL_KEY:-}
+      SOLANA_RPC_ENABLED: ${SOLANA_RPC_ENABLED:?SOLANA_RPC_ENABLED is required}
+      SOLANA_RPC_URL: ${SOLANA_RPC_URL:?SOLANA_RPC_URL is required}
+      SOLANA_NETWORK: ${SOLANA_NETWORK:?SOLANA_NETWORK is required}
+      SOLANA_TOKEN_MINT: ${SOLANA_TOKEN_MINT:?SOLANA_TOKEN_MINT is required}
+      SOLANA_TOKEN_DECIMALS: ${SOLANA_TOKEN_DECIMALS:-9}
+      SOLANA_DEPOSIT_WALLET: ${SOLANA_DEPOSIT_WALLET:?SOLANA_DEPOSIT_WALLET is required}
+      SOLANA_PAYOUT_WALLET: ${SOLANA_PAYOUT_WALLET:?SOLANA_PAYOUT_WALLET is required}
+      SOLANA_PAYOUT_PRIVATE_KEY: ${SOLANA_PAYOUT_PRIVATE_KEY:?SOLANA_PAYOUT_PRIVATE_KEY is required}
+      SOLANA_PAYOUT_MODE: ${SOLANA_PAYOUT_MODE:-rpc}
+      SOLANA_DEPOSIT_SCAN_LIMIT: ${SOLANA_DEPOSIT_SCAN_LIMIT:-50}
+      SOLANA_PAYOUT_LOW_BALANCE_RAW: ${SOLANA_PAYOUT_LOW_BALANCE_RAW:-0}
+      AUTO_WITHDRAW_SINGLE_MAX: ${AUTO_WITHDRAW_SINGLE_MAX:-5000}
+      USER_DAILY_WITHDRAW_MAX: ${USER_DAILY_WITHDRAW_MAX:-20000}
+      GLOBAL_HOURLY_WITHDRAW_MAX: ${GLOBAL_HOURLY_WITHDRAW_MAX:-30000}
+      GLOBAL_DAILY_WITHDRAW_MAX: ${GLOBAL_DAILY_WITHDRAW_MAX:-150000}
+    ports:
+      - "${ECONOMY_API_BIND:-127.0.0.1}:${ECONOMY_API_PORT:-8082}:8082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8082/ready >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  admin-api:
+    build:
+      <<: *app-build
+      args:
+        SERVICE: admin-api
+    image: ${ADMIN_API_IMAGE:-aeonblight/admin-api}:${IMAGE_TAG:-latest}
+    environment:
+      APP_PROFILE: ${APP_PROFILE:-production}
+      TEST_SCOPE: ${TEST_SCOPE:-contract}
+      STUB_MODE: ${STUB_MODE:-disabled}
+      AEONBLIGHT_SKIP_LOCAL_ENV: "true"
+      ADDR: ":8083"
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      REQUIRED_SCHEMA_VERSION: ${REQUIRED_SCHEMA_VERSION:?REQUIRED_SCHEMA_VERSION is required}
+      INTERNAL_KEY: ${INTERNAL_KEY:-}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      ADMIN_TOKEN: ${ADMIN_TOKEN:?ADMIN_TOKEN is required}
+      SUPER_ADMIN_OPS_KEY: ${SUPER_ADMIN_OPS_KEY:?SUPER_ADMIN_OPS_KEY is required}
+      ECONOMY_CONFIG_DIR: "/app/configs/economy"
+    ports:
+      - "${ADMIN_API_BIND:-127.0.0.1}:${ADMIN_API_PORT:-8083}:8083"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8083/ready >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+    restart: unless-stopped
+
+  economy-worker:
+    build:
+      <<: *app-build
+      args:
+        SERVICE: economy-worker
+    image: ${ECONOMY_WORKER_IMAGE:-aeonblight/economy-worker}:${IMAGE_TAG:-latest}
+    environment:
+      APP_PROFILE: ${APP_PROFILE:-production}
+      TEST_SCOPE: ${TEST_SCOPE:-contract}
+      STUB_MODE: ${STUB_MODE:-disabled}
+      AEONBLIGHT_SKIP_LOCAL_ENV: "true"
+      ECONOMY_API_URL: "http://economy-api:8082"
+      INTERNAL_KEY: ${INTERNAL_KEY:-}
+      SERVICE_ID: ${WORKER_SERVICE_ID:?WORKER_SERVICE_ID is required}
+      SERVICE_PRIVATE_KEY: ${WORKER_SERVICE_PRIVATE_KEY:?WORKER_SERVICE_PRIVATE_KEY is required}
+      SERVICE_AUTH_MAX_SKEW_SECONDS: ${SERVICE_AUTH_MAX_SKEW_SECONDS:-120}
+      WORKER_INTERVAL_SECONDS: ${WORKER_INTERVAL_SECONDS:-15}
+    depends_on:
+      - economy-api
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  redis-data:

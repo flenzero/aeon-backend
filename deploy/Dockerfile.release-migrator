@@ -1,0 +1,7 @@
+FROM scratch
+WORKDIR /app
+USER 65532:65532
+COPY ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
+COPY db-migrate /app/db-migrate
+COPY migrations /app/migrations
+ENTRYPOINT ["/app/db-migrate"]

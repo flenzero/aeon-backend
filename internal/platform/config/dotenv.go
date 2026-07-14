@@ -10,7 +10,11 @@ import (
 // loadLocalEnvFile loads KEY=VALUE pairs from local.env at the repo root when
 // not running in production. Existing process env vars always win.
 func loadLocalEnvFile() {
-	if strings.EqualFold(strings.TrimSpace(os.Getenv("AEONBLIGHT_ENV")), "production") {
+	profile := strings.TrimSpace(os.Getenv("APP_PROFILE"))
+	if profile == "" {
+		profile = strings.TrimSpace(os.Getenv("AEONBLIGHT_ENV"))
+	}
+	if strings.EqualFold(profile, "production") || strings.EqualFold(profile, "staging") {
 		return
 	}
 	if strings.EqualFold(strings.TrimSpace(os.Getenv("AEONBLIGHT_SKIP_LOCAL_ENV")), "true") {

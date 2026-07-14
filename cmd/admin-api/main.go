@@ -12,6 +12,9 @@ import (
 
 func main() {
 	cfg := config.Load("admin-api", ":8083")
+	if err := cfg.ValidateStartup(); err != nil {
+		log.Fatal(err)
+	}
 	st, closeStore := store.Open(context.Background(), cfg)
 	defer closeStore()
 	handler := admin.NewHandler(cfg, st)

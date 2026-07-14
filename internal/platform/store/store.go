@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"sort"
 	"strconv"
@@ -30,10 +31,23 @@ type DungeonEnterRequest struct {
 	OpID        string
 	AccountID   int64
 	CharacterID int64
+	ServerID    string
 	ChapterID   int
 	FloorID     int
 	IsBoss      bool
 	Cost        DungeonCost
+}
+
+type DungeonRunRecovery struct {
+	Required     bool      `json:"required"`
+	Status       string    `json:"status,omitempty"`
+	DungeonRunID string    `json:"dungeonRunId,omitempty"`
+	AccountID    int64     `json:"accountId,omitempty"`
+	CharacterID  int64     `json:"characterId,omitempty"`
+	ServerID     string    `json:"serverId,omitempty"`
+	ChapterID    int       `json:"chapterId,omitempty"`
+	FloorID      int       `json:"floorId,omitempty"`
+	StartedAt    time.Time `json:"startedAt,omitempty"`
 }
 
 type DungeonFinishRequest struct {
@@ -41,6 +55,7 @@ type DungeonFinishRequest struct {
 	AccountID            int64
 	CharacterID          int64
 	DungeonRunID         string
+	ServerID             string
 	ChapterID            int
 	FloorID              int
 	Result               string
@@ -81,9 +96,14 @@ type DungeonRewardGrant struct {
 }
 
 type EquipmentAffix struct {
-	AffixID string  `json:"affixId"`
-	Stat    string  `json:"stat"`
-	Value   float64 `json:"value"`
+	// AffixID, InstanceID and EnhanceHits are the persisted semantic form for
+	// Aeonblight equipment. Value is retained only to decode legacy equipment;
+	// newly-created equipment must not persist a rolled numeric value.
+	AffixID     string  `json:"affixId"`
+	InstanceID  string  `json:"instanceId,omitempty"`
+	EnhanceHits int     `json:"enhanceHits,omitempty"`
+	Stat        string  `json:"stat,omitempty"`
+	Value       float64 `json:"value,omitempty"`
 }
 
 type DungeonRewards struct {
@@ -283,7 +303,15 @@ type EquipmentItem struct {
 	Slot          int              `json:"slot"`
 	NFTContract   *string          `json:"nftContract"`
 	NFTTokenID    *string          `json:"nftTokenId"`
+	NFTStatus     *string          `json:"nftStatus,omitempty"`
 	Affixes       []EquipmentAffix `json:"affixes,omitempty"`
+	// The following fields are response-only, derived from the active economy
+	// configuration. They are deliberately not columns on equipment_items.
+	ResolvedBaseFlat     map[string]float64 `json:"resolvedBaseFlat,omitempty"`
+	ResolvedBasePercent  map[string]float64 `json:"resolvedBasePercent,omitempty"`
+	ResolvedFlatStats    map[string]float64 `json:"resolvedFlatStats,omitempty"`
+	ResolvedPercentStats map[string]float64 `json:"resolvedPercentStats,omitempty"`
+	FinalBonuses         map[string]float64 `json:"finalBonuses,omitempty"`
 }
 
 type LockedGame struct {
@@ -329,41 +357,53 @@ type AuditEntry struct {
 }
 
 type Store struct {
-	mu          sync.Mutex
-	nextID      int64
-	nonces      map[string]*WalletLoginNonce
-	accounts    map[int64]*Account
-	byWallet    map[string]int64
-	characters  map[int64]*Character
-	tickets     map[string]*GameTicket
-	tokens      map[int64]*AccountToken
-	locked      map[int64]*LockedGame
-	withdrawals map[int64]*Withdrawal
-	ledger      []LedgerEntry
-	audits      []AuditEntry
-	sessions    map[string]*AccountSession
-	refresh     map[string]*RefreshTokenRecord
-	servers     map[string]*GameServer
-	online      map[int64]*OnlineSession
+	mu                sync.Mutex
+	nextID            int64
+	nonces            map[string]*WalletLoginNonce
+	accounts          map[int64]*Account
+	byWallet          map[string]int64
+	characters        map[int64]*Character
+	tickets           map[string]*GameTicket
+	tokens            map[int64]*AccountToken
+	locked            map[int64]*LockedGame
+	withdrawals       map[int64]*Withdrawal
+	ledger            []LedgerEntry
+	audits            []AuditEntry
+	adminUsers        map[string]*AdminUser
+	adminLoginNonces  map[string]*AdminLoginNonce
+	adminOperations   map[string]*AdminOperation
+	sessions          map[string]*AccountSession
+	refresh           map[string]*RefreshTokenRecord
+	servers           map[string]*GameServer
+	online            map[int64]*OnlineSession
+	serviceIdentities map[string]*ServiceIdentity
+	serviceNonces     map[string]time.Time
+	dungeonRecoveries map[int64]*DungeonRunRecovery
 }
 
 var Default = New()
 
 func New() *Store {
 	return &Store{
-		nextID:      1000,
-		nonces:      map[string]*WalletLoginNonce{},
-		accounts:    map[int64]*Account{},
-		byWallet:    map[string]int64{},
-		characters:  map[int64]*Character{},
-		tickets:     map[string]*GameTicket{},
-		tokens:      map[int64]*AccountToken{},
-		locked:      map[int64]*LockedGame{},
-		withdrawals: map[int64]*Withdrawal{},
-		sessions:    map[string]*AccountSession{},
-		refresh:     map[string]*RefreshTokenRecord{},
-		servers:     map[string]*GameServer{},
-		online:      map[int64]*OnlineSession{},
+		nextID:            1000,
+		nonces:            map[string]*WalletLoginNonce{},
+		accounts:          map[int64]*Account{},
+		byWallet:          map[string]int64{},
+		characters:        map[int64]*Character{},
+		tickets:           map[string]*GameTicket{},
+		tokens:            map[int64]*AccountToken{},
+		locked:            map[int64]*LockedGame{},
+		withdrawals:       map[int64]*Withdrawal{},
+		sessions:          map[string]*AccountSession{},
+		refresh:           map[string]*RefreshTokenRecord{},
+		servers:           map[string]*GameServer{},
+		online:            map[int64]*OnlineSession{},
+		adminUsers:        map[string]*AdminUser{},
+		adminLoginNonces:  map[string]*AdminLoginNonce{},
+		adminOperations:   map[string]*AdminOperation{},
+		serviceIdentities: map[string]*ServiceIdentity{},
+		serviceNonces:     map[string]time.Time{},
+		dungeonRecoveries: map[int64]*DungeonRunRecovery{},
 	}
 }
 
@@ -496,6 +536,276 @@ func (s *Store) AdminGetAccount(accountID int64, wallet string) (AdminAccountDet
 	}, nil
 }
 
+func (s *Store) ListAdminCharacters(filter AdminCharacterListFilter) ([]AdminCharacterSummary, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	limit := clampAdminLimit(filter.Limit)
+	offset := filter.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	keyword := strings.ToLower(strings.TrimSpace(filter.Keyword))
+	wallet := strings.TrimSpace(filter.Wallet)
+	status := strings.ToUpper(strings.TrimSpace(filter.Status))
+	serverID := strings.TrimSpace(filter.ServerID)
+	matches := []AdminCharacterSummary{}
+	for _, character := range s.characters {
+		if character.Deleted {
+			continue
+		}
+		account := s.accounts[character.AccountID]
+		if account == nil {
+			continue
+		}
+		accountStatus := "ACTIVE"
+		if account.IsBanned {
+			accountStatus = "BANNED"
+		}
+		online := s.online[character.AccountID]
+		isOnline := online != nil && online.CharacterID == character.ID
+		if keyword != "" {
+			haystack := strings.ToLower(strings.Join([]string{
+				character.Name,
+				strconv.FormatInt(character.ID, 10),
+				strconv.FormatInt(character.AccountID, 10),
+				account.Username,
+				account.WalletAddress,
+			}, " "))
+			if !strings.Contains(haystack, keyword) {
+				continue
+			}
+		}
+		if filter.AccountID > 0 && character.AccountID != filter.AccountID {
+			continue
+		}
+		if wallet != "" && account.WalletAddress != wallet {
+			continue
+		}
+		if filter.MinLevel > 1 {
+			continue
+		}
+		if filter.MaxLevel > 0 && filter.MaxLevel < 1 {
+			continue
+		}
+		if filter.HasTradingLicense != nil && *filter.HasTradingLicense {
+			continue
+		}
+		if status != "" && accountStatus != status {
+			continue
+		}
+		if filter.OnlineOnly && !isOnline {
+			continue
+		}
+		if serverID != "" && (!isOnline || online.ServerID != serverID) {
+			continue
+		}
+		row := AdminCharacterSummary{
+			CharacterID:       character.ID,
+			AccountID:         character.AccountID,
+			Name:              character.Name,
+			Level:             1,
+			WalletAddress:     account.WalletAddress,
+			AccountStatus:     accountStatus,
+			HasTradingLicense: false,
+			LastLoginAt:       account.LastLoginAt,
+			Online:            isOnline,
+			CreatedAt:         character.CreatedAt,
+		}
+		if isOnline {
+			row.ServerID = online.ServerID
+		}
+		matches = append(matches, row)
+	}
+	sort.Slice(matches, func(i, j int) bool { return matches[i].CreatedAt.After(matches[j].CreatedAt) })
+	if offset >= len(matches) {
+		return []AdminCharacterSummary{}, nil
+	}
+	end := offset + limit
+	if end > len(matches) {
+		end = len(matches)
+	}
+	return append([]AdminCharacterSummary(nil), matches[offset:end]...), nil
+}
+
+func (s *Store) AdminCharacterDetail(characterID int64) (AdminCharacterDetail, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	character := s.characters[characterID]
+	if character == nil || character.Deleted {
+		return AdminCharacterDetail{}, ErrNotFound
+	}
+	account := s.accounts[character.AccountID]
+	if account == nil {
+		return AdminCharacterDetail{}, ErrNotFound
+	}
+	status := "ACTIVE"
+	if account.IsBanned {
+		status = "BANNED"
+	}
+	token := *s.ensureTokenLocked(account.ID)
+	out := AdminCharacterDetail{
+		Character: AdminCharacterCore{
+			CharacterID: character.ID,
+			AccountID:   character.AccountID,
+			Name:        character.Name,
+			Level:       1,
+			BagSlots:    25,
+			CreatedAt:   character.CreatedAt,
+		},
+		Account: AdminAccountDetail{
+			ID:            account.ID,
+			Username:      account.Username,
+			WalletAddress: account.WalletAddress,
+			Status:        status,
+			IsBanned:      account.IsBanned,
+			CreatedAt:     account.CreatedAt,
+			LastLoginAt:   account.LastLoginAt,
+		},
+		Economy: EconomySnapshot{
+			AccountID:    account.ID,
+			CharacterID:  character.ID,
+			BagSlots:     25,
+			Level:        1,
+			AccountToken: token,
+			Inventory:    []InventoryItem{},
+			Warehouse:    []InventoryItem{},
+			LootTray:     []InventoryItem{},
+			Equipment:    []EquipmentItem{},
+		},
+	}
+	if online := s.online[account.ID]; online != nil && online.CharacterID == character.ID {
+		lastSeen := online.LastSeenAt
+		out.Online = AdminOnlineStatus{
+			Online:       true,
+			ServerID:     online.ServerID,
+			ConnectionID: online.ConnectionID,
+			SessionID:    online.SessionID,
+			LastSeenAt:   &lastSeen,
+		}
+	}
+	return out, nil
+}
+
+func (s *Store) ListCharacterLedger(characterID int64, kind string, limit, offset int) ([]LedgerEntry, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	character := s.characters[characterID]
+	if character == nil || character.Deleted {
+		return nil, ErrNotFound
+	}
+	limit = clampAdminLimit(limit)
+	if offset < 0 {
+		offset = 0
+	}
+	kind = strings.TrimSpace(kind)
+	out := []LedgerEntry{}
+	for _, row := range s.ledger {
+		if row.AccountID != character.AccountID {
+			continue
+		}
+		if kind != "" && row.Kind != kind {
+			continue
+		}
+		out = append(out, row)
+	}
+	if offset >= len(out) {
+		return []LedgerEntry{}, nil
+	}
+	end := offset + limit
+	if end > len(out) {
+		end = len(out)
+	}
+	return append([]LedgerEntry(nil), out[offset:end]...), nil
+}
+
+func (s *Store) ListCharacterAudits(characterID int64, limit, offset int) ([]AuditEntry, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	character := s.characters[characterID]
+	if character == nil || character.Deleted {
+		return nil, ErrNotFound
+	}
+	limit = clampAdminLimit(limit)
+	if offset < 0 {
+		offset = 0
+	}
+	characterTarget := "character:" + strconv.FormatInt(characterID, 10)
+	accountTarget := "account:" + strconv.FormatInt(character.AccountID, 10)
+	out := []AuditEntry{}
+	for i := len(s.audits) - 1; i >= 0; i-- {
+		row := s.audits[i]
+		if row.Target == characterTarget || row.Target == accountTarget {
+			out = append(out, row)
+		}
+	}
+	if offset >= len(out) {
+		return []AuditEntry{}, nil
+	}
+	end := offset + limit
+	if end > len(out) {
+		end = len(out)
+	}
+	return append([]AuditEntry(nil), out[offset:end]...), nil
+}
+
+func (s *Store) AdminCharacterTimeline(characterID int64, filter AdminCharacterTimelineFilter) (AdminCharacterTimelinePage, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	character := s.characters[characterID]
+	if character == nil || character.Deleted {
+		return AdminCharacterTimelinePage{}, ErrNotFound
+	}
+	limit := clampAdminLimit(filter.Limit)
+	offset := filter.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	types, err := adminTimelineTypes(filter.Types)
+	if err != nil {
+		return AdminCharacterTimelinePage{}, err
+	}
+	items := []AdminCharacterTimelineItem{}
+	if types["ledger"] {
+		for _, row := range s.ledger {
+			if row.AccountID != character.AccountID {
+				continue
+			}
+			items = append(items, AdminCharacterTimelineItem{
+				Type: "ledger", ID: "ledger:" + strconv.FormatInt(row.ID, 10), Title: row.Kind,
+				Detail: row.Detail, Amount: row.Amount, Ref: row.Ref, CreatedAt: row.CreatedAt,
+			})
+		}
+	}
+	if types["audit"] {
+		characterTarget := "character:" + strconv.FormatInt(characterID, 10)
+		accountTarget := "account:" + strconv.FormatInt(character.AccountID, 10)
+		for _, row := range s.audits {
+			if row.Target != characterTarget && row.Target != accountTarget {
+				continue
+			}
+			items = append(items, AdminCharacterTimelineItem{
+				Type: "audit", ID: "audit:" + strconv.FormatInt(row.ID, 10), Title: row.Action,
+				Detail: row.Reason, CreatedAt: row.CreatedAt,
+			})
+		}
+	}
+	sort.Slice(items, func(i, j int) bool { return items[i].CreatedAt.After(items[j].CreatedAt) })
+	total := len(items)
+	if offset >= len(items) {
+		return AdminCharacterTimelinePage{Items: []AdminCharacterTimelineItem{}, Count: 0, Total: total, Limit: limit, Offset: offset}, nil
+	}
+	end := offset + limit
+	if end > len(items) {
+		end = len(items)
+	}
+	page := append([]AdminCharacterTimelineItem(nil), items[offset:end]...)
+	return AdminCharacterTimelinePage{Items: page, Count: len(page), Total: total, Limit: limit, Offset: offset}, nil
+}
+
+func (s *Store) AdminEquipmentDetail(equipmentUID string) (AdminEquipmentDetail, error) {
+	return AdminEquipmentDetail{}, adminErrRequiresPostgres("admin equipment detail")
+}
+
 func (s *Store) SetAccountRiskLevel(accountID int64, riskLevel int) error {
 	return adminErrRequiresPostgres("set account risk level")
 }
@@ -546,8 +856,89 @@ func (s *Store) AuditTarget(adminID, action, targetType, targetID, reason string
 	return s.Audit(adminID, action, target, reason)
 }
 
+func (s *Store) AdminOperation(opID string) (AdminOperation, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	row, ok := s.adminOperations[strings.TrimSpace(opID)]
+	if !ok {
+		return AdminOperation{}, ErrNotFound
+	}
+	cp := *row
+	cp.Response = append(json.RawMessage(nil), row.Response...)
+	return cp, nil
+}
+
+func (s *Store) SaveAdminOperation(in AdminOperation) (AdminOperation, error) {
+	if strings.TrimSpace(in.OpID) == "" {
+		return AdminOperation{}, errors.New("opId is required")
+	}
+	if len(in.Response) == 0 || !json.Valid(in.Response) {
+		return AdminOperation{}, errors.New("admin operation response is invalid")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if existing, ok := s.adminOperations[strings.TrimSpace(in.OpID)]; ok {
+		cp := *existing
+		cp.Response = append(json.RawMessage(nil), existing.Response...)
+		return cp, nil
+	}
+	in.OpID = strings.TrimSpace(in.OpID)
+	in.AdminID = strings.TrimSpace(in.AdminID)
+	in.Action = strings.TrimSpace(in.Action)
+	in.Target = strings.TrimSpace(in.Target)
+	in.Response = append(json.RawMessage(nil), in.Response...)
+	in.CreatedAt = time.Now().UTC()
+	cp := in
+	s.adminOperations[in.OpID] = &cp
+	return in, nil
+}
+
+func (s *Store) AdminGrantRewards(req AdminRewardGrant) (AdminRewardGrantResult, error) {
+	return AdminRewardGrantResult{}, adminErrRequiresPostgres("admin reward grant")
+}
+
+func (s *Store) AdminCharacterLevel(characterID int64) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.characters[characterID]
+	if !ok {
+		return 0, ErrNotFound
+	}
+	// The in-memory repository does not model progression; it exists only for
+	// route contracts, so use the baseline character level.
+	return 1, nil
+}
+
+func (s *Store) CreateAdminCompensationPreview(adminID string, filter AdminCompensationFilter, rewards AdminCompensationRewards) (AdminCompensationPreview, error) {
+	return AdminCompensationPreview{}, adminErrRequiresPostgres("admin compensation preview")
+}
+
+func (s *Store) AdminCompensationPreview(previewID, adminID string) (AdminCompensationPreviewDetail, error) {
+	return AdminCompensationPreviewDetail{}, adminErrRequiresPostgres("admin compensation preview")
+}
+
+func (s *Store) ListAdminCompensationPreviewTargets(previewID, adminID, keyword string, limit, offset int) (AdminCompensationTargetPage, error) {
+	return AdminCompensationTargetPage{}, adminErrRequiresPostgres("admin compensation preview targets")
+}
+
+func (s *Store) CommitAdminCompensation(req AdminCompensationCommit) (AdminCompensationResult, error) {
+	return AdminCompensationResult{}, adminErrRequiresPostgres("admin compensation commit")
+}
+
+func (s *Store) CreateAdminLotteryPreview(adminID string, characterID int64, rewards DungeonRewardPlan) (AdminLotteryPreview, error) {
+	return AdminLotteryPreview{}, adminErrRequiresPostgres("admin lottery preview")
+}
+
+func (s *Store) CommitAdminLotteryPreview(req AdminLotteryCommit) (AdminRewardGrantResult, error) {
+	return AdminRewardGrantResult{}, adminErrRequiresPostgres("admin lottery preview commit")
+}
+
 func (s *Store) ListPaymentOrdersAdmin(filter AdminListFilter) ([]PaymentOrder, error) {
 	return nil, adminErrRequiresPostgres("payment orders")
+}
+
+func (s *Store) AdminPaymentTrace(orderID string) (AdminPaymentTrace, error) {
+	return AdminPaymentTrace{}, adminErrRequiresPostgres("payment trace")
 }
 
 func (s *Store) ListNFTMintRequests(filter AdminListFilter) ([]NFTMintRequest, error) {
@@ -654,8 +1045,19 @@ func (s *Store) DungeonEnter(req DungeonEnterRequest) (DungeonResult, error) {
 	if err != nil {
 		return DungeonResult{}, err
 	}
+	runID := "memory-" + strings.TrimSpace(req.OpID)
+	s.mu.Lock()
+	if existing := s.dungeonRecoveries[req.CharacterID]; existing != nil && existing.Required {
+		s.mu.Unlock()
+		return DungeonResult{}, ErrForbidden
+	}
+	s.dungeonRecoveries[req.CharacterID] = &DungeonRunRecovery{
+		Required: true, DungeonRunID: runID, AccountID: req.AccountID, CharacterID: req.CharacterID,
+		ServerID: strings.TrimSpace(req.ServerID), ChapterID: req.ChapterID, FloorID: req.FloorID, StartedAt: time.Now().UTC(),
+	}
+	s.mu.Unlock()
 	return DungeonResult{
-		DungeonRunID: "memory-" + strings.TrimSpace(req.OpID),
+		DungeonRunID: runID,
 		ChapterID:    req.ChapterID,
 		FloorID:      req.FloorID,
 		IsBoss:       req.IsBoss,
@@ -671,6 +1073,40 @@ func (s *Store) DungeonEnter(req DungeonEnterRequest) (DungeonResult, error) {
 	}, nil
 }
 
+func (s *Store) ActiveDungeonRun(accountID, characterID int64) (DungeonRunRecovery, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	row := s.dungeonRecoveries[characterID]
+	if row == nil || !row.Required || row.AccountID != accountID {
+		return DungeonRunRecovery{}, ErrNotFound
+	}
+	return *row, nil
+}
+
+func (s *Store) CancelDungeonRun(accountID, characterID int64, dungeonRunID, reason string) (DungeonRunRecovery, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	row := s.dungeonRecoveries[characterID]
+	if row == nil || row.AccountID != accountID || row.DungeonRunID != strings.TrimSpace(dungeonRunID) {
+		return DungeonRunRecovery{}, ErrNotFound
+	}
+	if !row.Required {
+		if row.Status == "CANCELLED" {
+			return *row, nil
+		}
+		return DungeonRunRecovery{}, ErrForbidden
+	}
+	row.Required = false
+	row.Status = "CANCELLED"
+	for _, ticket := range s.tickets {
+		if ticket.AccountID == accountID && ticket.CharacterID == characterID && !ticket.Consumed {
+			ticket.Consumed = true
+		}
+	}
+	_ = reason
+	return *row, nil
+}
+
 func (s *Store) DungeonFinish(req DungeonFinishRequest) (DungeonResult, error) {
 	snapshot, err := s.EconomySnapshot(req.AccountID, req.CharacterID)
 	if err != nil {
@@ -681,6 +1117,23 @@ func (s *Store) DungeonFinish(req DungeonFinishRequest) (DungeonResult, error) {
 	if result == "victory" {
 		status = "REWARDED"
 	}
+	s.mu.Lock()
+	recovery := s.dungeonRecoveries[req.CharacterID]
+	if recovery == nil || !recovery.Required || recovery.AccountID != req.AccountID || recovery.DungeonRunID != strings.TrimSpace(req.DungeonRunID) {
+		s.mu.Unlock()
+		return DungeonResult{}, ErrForbidden
+	}
+	if recovery.ServerID != "" && strings.TrimSpace(req.ServerID) != recovery.ServerID {
+		s.mu.Unlock()
+		return DungeonResult{}, ErrForbidden
+	}
+	recovery.Required = false
+	if result == "victory" {
+		recovery.Status = "FINISHED"
+	} else {
+		recovery.Status = "FAILED"
+	}
+	s.mu.Unlock()
 	rewardItems := []InventoryItem{}
 	rewardEquipment := []EquipmentItem{}
 	for index, reward := range req.RewardPlan.Items {
@@ -831,6 +1284,18 @@ func (s *Store) EquipmentRepair(req EquipmentRepairRequest) (EquipmentRepairResu
 	return EquipmentRepairResult{}, errors.New("equipment repair requires postgres store")
 }
 
+func (s *Store) EquipmentEnhance(req EquipmentEnhanceRequest) (EquipmentEnhanceResult, error) {
+	return EquipmentEnhanceResult{}, errors.New("equipment enhancement requires postgres store")
+}
+
+func (s *Store) EquipmentNPCRecycle(req EquipmentNPCRecycleRequest) (EquipmentNPCRecycleResult, error) {
+	return EquipmentNPCRecycleResult{}, errors.New("equipment npc recycle requires postgres store")
+}
+
+func (s *Store) PurgeExpiredNPCRecycledEquipment(now time.Time, limit int) (int64, error) {
+	return 0, errors.New("equipment npc recycle purge requires postgres store")
+}
+
 func (s *Store) RequestNFTMint(req NFTMintRequestInput) (NFTMintRequestResult, error) {
 	return NFTMintRequestResult{}, errors.New("nft mint requires postgres store")
 }
@@ -881,6 +1346,35 @@ func (s *Store) CreateBagExpandPayment(req GrowthPaymentRequest) (GrowthPaymentR
 
 func (s *Store) CreateTradingLicensePayment(req GrowthPaymentRequest) (GrowthPaymentResult, error) {
 	return GrowthPaymentResult{}, errors.New("trading license requires postgres store")
+}
+
+func (s *Store) CreateLotteryPayment(req LotteryPaymentRequest) (LotteryPaymentResult, error) {
+	return LotteryPaymentResult{}, errors.New("lottery payment requires postgres store")
+}
+
+func (s *Store) BountyBoard(req BountyBoardRequest) (BountyBoard, error) {
+	return BountyBoard{}, errors.New("bounty board requires postgres store")
+}
+func (s *Store) UnlockBountyGoldSlot(req BountyGoldUnlockRequest) (BountyBoard, error) {
+	return BountyBoard{}, errors.New("bounty board requires postgres store")
+}
+func (s *Store) CreateBountyPayment(req BountyPaymentRequest) (BountyPaymentResult, error) {
+	return BountyPaymentResult{}, errors.New("bounty board requires postgres store")
+}
+func (s *Store) RefreshBounty(req BountyRefreshRequest) (BountyBoard, error) {
+	return BountyBoard{}, errors.New("bounty board requires postgres store")
+}
+func (s *Store) SubmitBountyEquipment(req BountyEquipmentSubmitRequest) (BountyTask, error) {
+	return BountyTask{}, errors.New("bounty board requires postgres store")
+}
+func (s *Store) ClaimBounty(req BountyClaimRequest) (BountyTask, error) {
+	return BountyTask{}, errors.New("bounty board requires postgres store")
+}
+func (s *Store) DrawBountyBadge(req BountyBadgeDrawRequest) (BountyBadgeDrawResult, error) {
+	return BountyBadgeDrawResult{}, errors.New("bounty board requires postgres store")
+}
+func (s *Store) ProgressBountyCombat(req BountyCombatProgressRequest) ([]BountyTask, error) {
+	return nil, errors.New("bounty board requires postgres store")
 }
 
 func (s *Store) MarketplaceSlots(accountID int64, rules MarketplaceRules) (MarketplaceSlots, error) {

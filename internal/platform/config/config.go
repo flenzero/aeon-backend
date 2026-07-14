@@ -9,13 +9,23 @@ import (
 
 type Config struct {
 	ServiceName           string
+	Profile               Profile
+	TestScope             TestScope
+	StubMode              StubMode
+	AllowRedisFallback    bool
 	Addr                  string
 	EconomyAPIURL         string
 	EconomyConfigDir      string
 	DatabaseURL           string
+	RequiredSchemaVersion string
 	InternalKey           string
 	JWTSecret             string
 	AdminToken            string
+	SuperAdminOpsKey      string
+	AdminSessionTTLMin    int
+	ServiceID             string
+	ServicePrivateKey     string
+	ServiceAuthMaxSkewSec int
 	WorkerInterval        time.Duration
 	AutoWithdrawSingleMax int64
 	UserDailyWithdrawMax  int64
@@ -42,19 +52,41 @@ type Config struct {
 	RedisDB              int
 	SessionTTLHours      int
 	OnlinePresenceTTLSec int
+
+	loadIssues []string
 }
 
 func Load(serviceName, defaultAddr string) Config {
 	loadLocalEnvFile()
-	return Config{
+	profile := Profile(strings.ToLower(strings.TrimSpace(env("APP_PROFILE", env("AEONBLIGHT_ENV", string(ProfileDevelopment))))))
+	defaultStub := StubEnabled
+	if profile == ProfileStaging || profile == ProfileProduction {
+		defaultStub = StubDisabled
+	}
+	defaultAdminToken := "dev-admin-token"
+	if profile == ProfileStaging || profile == ProfileProduction {
+		defaultAdminToken = ""
+	}
+	allowRedisFallback, allowRedisFallbackIssue := envBoolValidated("ALLOW_REDIS_FALLBACK", false)
+	cfg := Config{
 		ServiceName:               serviceName,
+		Profile:                   profile,
+		TestScope:                 TestScope(strings.ToLower(strings.TrimSpace(env("TEST_SCOPE", string(TestScopeContract))))),
+		StubMode:                  StubMode(strings.ToLower(strings.TrimSpace(env("STUB_MODE", string(defaultStub))))),
+		AllowRedisFallback:        allowRedisFallback,
 		Addr:                      env("ADDR", defaultAddr),
 		EconomyAPIURL:             env("ECONOMY_API_URL", "http://localhost:8082"),
 		EconomyConfigDir:          env("ECONOMY_CONFIG_DIR", "configs/economy"),
 		DatabaseURL:               env("DATABASE_URL", ""),
-		InternalKey:               env("INTERNAL_KEY", "dev-internal-key"),
+		RequiredSchemaVersion:     env("REQUIRED_SCHEMA_VERSION", "20260714_admin_signed_login_v1"),
+		InternalKey:               envAllowEmpty("INTERNAL_KEY", "dev-internal-key"),
 		JWTSecret:                 env("JWT_SECRET", "dev-jwt-secret"),
-		AdminToken:                env("ADMIN_TOKEN", "dev-admin-token"),
+		AdminToken:                env("ADMIN_TOKEN", defaultAdminToken),
+		SuperAdminOpsKey:          env("SUPER_ADMIN_OPS_KEY", ""),
+		AdminSessionTTLMin:        envInt("ADMIN_SESSION_TTL_MINUTES", 30),
+		ServiceID:                 env("SERVICE_ID", ""),
+		ServicePrivateKey:         env("SERVICE_PRIVATE_KEY", ""),
+		ServiceAuthMaxSkewSec:     envInt("SERVICE_AUTH_MAX_SKEW_SECONDS", 120),
 		WorkerInterval:            time.Duration(envInt("WORKER_INTERVAL_SECONDS", 15)) * time.Second,
 		AutoWithdrawSingleMax:     int64(envInt("AUTO_WITHDRAW_SINGLE_MAX", 5000)),
 		UserDailyWithdrawMax:      int64(envInt("USER_DAILY_WITHDRAW_MAX", 20000)),
@@ -78,11 +110,39 @@ func Load(serviceName, defaultAddr string) Config {
 		SessionTTLHours:           envInt("SESSION_TTL_HOURS", 168),
 		OnlinePresenceTTLSec:      envInt("ONLINE_PRESENCE_TTL_SECONDS", 90),
 	}
+	if allowRedisFallbackIssue != "" {
+		cfg.loadIssues = append(cfg.loadIssues, allowRedisFallbackIssue)
+	}
+	return cfg
+}
+
+func (c Config) ServiceAuthMaxSkew() time.Duration {
+	seconds := c.ServiceAuthMaxSkewSec
+	if seconds <= 0 {
+		seconds = 120
+	}
+	return time.Duration(seconds) * time.Second
+}
+
+func (c Config) AdminSessionTTL() time.Duration {
+	minutes := c.AdminSessionTTLMin
+	if minutes <= 0 {
+		minutes = 30
+	}
+	return time.Duration(minutes) * time.Minute
 }
 
 func env(key, fallback string) string {
 	value := os.Getenv(key)
 	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func envAllowEmpty(key, fallback string) string {
+	value, ok := os.LookupEnv(key)
+	if !ok {
 		return fallback
 	}
 	return value
@@ -112,5 +172,20 @@ func envBool(key string, fallback bool) bool {
 		return false
 	default:
 		return fallback
+	}
+}
+
+func envBoolValidated(key string, fallback bool) (bool, string) {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback, ""
+	}
+	switch strings.ToLower(value) {
+	case "1", "true", "yes", "on":
+		return true, ""
+	case "0", "false", "no", "off":
+		return false, ""
+	default:
+		return fallback, key + " must be a boolean (true/false)"
 	}
 }

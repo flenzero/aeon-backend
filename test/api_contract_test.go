@@ -36,9 +36,9 @@ func TestEveryHTTPRouteIsRegisteredAndGuarded(t *testing.T) {
 		endpoints []endpoint
 		wantCount int
 	}{
-		{"account-api", account.NewHandler(cfg, st).Routes(), accountEndpoints(), 20},
-		{"economy-api", economy.NewHandler(cfg, st).Routes(), economyEndpoints(), 49},
-		{"admin-api", admin.NewHandler(cfg, st).Routes(), adminEndpoints(), 20},
+		{"account-api", account.NewHandler(cfg, st).Routes(), accountEndpoints(), 23},
+		{"economy-api", economy.NewHandler(cfg, st).Routes(), economyEndpoints(), 50},
+		{"admin-api", admin.NewHandler(cfg, st).Routes(), adminEndpoints(), 52},
 	}
 
 	for _, service := range tests {
@@ -121,6 +121,39 @@ func TestAccountEconomyAdminHTTPWorkflow(t *testing.T) {
 	doHandlerJSON(t, adminHandler, http.MethodGet, "/api/admin/accounts?accountId="+fmt.Sprint(login.Account.ID), nil, adminHeaders, http.StatusOK, &detail)
 	if detail.ID != login.Account.ID {
 		t.Fatalf("admin account=%+v", detail)
+	}
+
+	var characters struct {
+		Items []store.AdminCharacterSummary `json:"items"`
+		Count int                           `json:"count"`
+	}
+	doHandlerJSON(t, adminHandler, http.MethodGet, "/api/admin/characters?keyword=ContractHero", nil, adminHeaders, http.StatusOK, &characters)
+	if characters.Count != 1 || characters.Items[0].CharacterID != character.ID {
+		t.Fatalf("admin characters=%+v", characters)
+	}
+
+	var characterDetail struct {
+		Character store.AdminCharacterCore `json:"character"`
+		Account   store.AdminAccountDetail `json:"account"`
+		Economy   store.EconomySnapshot    `json:"economy"`
+		Online    store.AdminOnlineStatus  `json:"online"`
+	}
+	doHandlerJSON(t, adminHandler, http.MethodGet, "/api/admin/characters/"+fmt.Sprint(character.ID), nil, adminHeaders, http.StatusOK, &characterDetail)
+	if characterDetail.Character.CharacterID != character.ID || characterDetail.Account.ID != login.Account.ID || characterDetail.Economy.CharacterID != character.ID {
+		t.Fatalf("admin character detail=%+v", characterDetail)
+	}
+
+	var catalog struct {
+		ConfigVersion string `json:"configVersion"`
+		Items         []struct {
+			ItemID               string `json:"itemId"`
+			DisplayName          string `json:"displayName"`
+			EnabledForAdminGrant bool   `json:"enabledForAdminGrant"`
+		} `json:"items"`
+	}
+	doHandlerJSON(t, adminHandler, http.MethodGet, "/api/admin/catalog/items?keyword=ashwood_white&limit=5", nil, adminHeaders, http.StatusOK, &catalog)
+	if catalog.ConfigVersion == "" || len(catalog.Items) != 1 || catalog.Items[0].ItemID != "ashwood_white" || !catalog.Items[0].EnabledForAdminGrant {
+		t.Fatalf("admin catalog=%+v", catalog)
 	}
 
 	jwtHeaders := map[string]string{"Authorization": "Bearer " + login.AccessToken}
@@ -218,6 +251,11 @@ func (r *nftContractRepository) ListNFTAssets(accountID int64) ([]store.NFTAsset
 func testConfig() config.Config {
 	return config.Config{
 		ServiceName:           "contract-test",
+		Profile:               config.ProfileTest,
+		TestScope:             config.TestScopeContract,
+		StubMode:              config.StubEnabled,
+		AllowRedisFallback:    true,
+		RequiredSchemaVersion: "contract-test",
 		InternalKey:           "test-internal-key",
 		JWTSecret:             "test-jwt-secret",
 		AdminToken:            "test-admin-token",
@@ -277,11 +315,13 @@ func doHandlerJSON(t *testing.T, handler http.Handler, method, target string, bo
 func accountEndpoints() []endpoint {
 	return []endpoint{
 		{"GET", "/health", 200},
+		{"GET", "/ready", 200},
 		{"GET", "/api/auth/wallet/nonce?walletAddress=invalid", 400},
 		{"POST", "/api/auth/wallet", 400}, {"POST", "/api/auth/refresh", 401},
 		{"POST", "/api/auth/logout", 401}, {"GET", "/api/auth/verify", 401},
 		{"GET", "/api/auth/session/redis", 401}, {"GET", "/api/character/list", 401},
 		{"POST", "/api/character/create", 401}, {"POST", "/api/game/launch", 401},
+		{"GET", "/api/game/dungeon/recovery", 401}, {"POST", "/api/game/dungeon/recovery", 401},
 		{"POST", "/api/game/launch/consume", 401}, {"POST", "/api/game/servers/register", 401},
 		{"POST", "/api/game/servers/heartbeat", 401}, {"GET", "/api/game/servers", 401},
 		{"POST", "/api/game/online/enter", 401}, {"POST", "/api/game/online/heartbeat", 401},
@@ -311,7 +351,7 @@ func economyEndpoints() []endpoint {
 		{"POST", "/api/economy/internal/unlocks/settle"}, {"POST", "/api/economy/internal/withdrawals/process"},
 		{"POST", "/api/economy/internal/chain/deposits/scan"}, {"POST", "/api/economy/internal/chain/payouts/submit"}, {"POST", "/api/economy/internal/chain/payouts/confirm"}, {"POST", "/api/economy/internal/payments/confirm"},
 	}
-	out := []endpoint{{"GET", "/health", 200}}
+	out := []endpoint{{"GET", "/health", 200}, {"GET", "/ready", 200}}
 	for _, item := range paths {
 		out = append(out, endpoint{item.method, item.path, 401})
 	}
@@ -320,15 +360,32 @@ func economyEndpoints() []endpoint {
 
 func adminEndpoints() []endpoint {
 	paths := []struct{ method, path string }{
+		{"GET", "/api/admin/auth/nonce"}, {"POST", "/api/admin/auth/login"},
+		{"GET", "/api/admin/admin-users"}, {"POST", "/api/admin/admin-users"}, {"DELETE", "/api/admin/admin-users/ops-01"},
 		{"GET", "/api/admin/accounts"}, {"POST", "/api/admin/accounts/ban"}, {"POST", "/api/admin/accounts/risk-level"}, {"POST", "/api/admin/accounts/license"}, {"POST", "/api/admin/accounts/sessions/revoke"},
+		{"GET", "/api/admin/characters"}, {"GET", "/api/admin/characters/1"}, {"GET", "/api/admin/characters/1/ledger"}, {"GET", "/api/admin/characters/1/audits"}, {"GET", "/api/admin/characters/1/timeline"},
+		{"GET", "/api/admin/equipment/equipment-1"},
+		{"GET", "/api/admin/catalog/items"},
 		{"GET", "/api/admin/market/restrictions"}, {"POST", "/api/admin/market/restrictions"}, {"POST", "/api/admin/market/restrictions/revoke"},
 		{"GET", "/api/admin/risk/events"}, {"POST", "/api/admin/risk/events"}, {"GET", "/api/admin/audits"}, {"GET", "/api/admin/ledger"},
 		{"GET", "/api/admin/withdrawals"}, {"POST", "/api/admin/withdrawals/review"}, {"GET", "/api/admin/payments"}, {"GET", "/api/admin/nft/requests"}, {"POST", "/api/admin/nft/mint/confirm"},
 		{"GET", "/api/admin/hot-wallet"}, {"POST", "/api/admin/hot-wallet/pause"},
+		{"GET", "/api/admin/service-identities"}, {"POST", "/api/admin/service-identities"}, {"DELETE", "/api/admin/service-identities/game-server-01"},
+		{"GET", "/api/admin/ops/servers"}, {"GET", "/api/admin/ops/servers/online"}, {"GET", "/api/admin/ops/servers/online-players"},
+		{"GET", "/api/admin/ops/servers/game-server-01"}, {"PUT", "/api/admin/ops/servers/game-server-01"},
+		{"POST", "/api/admin/ops/servers/game-server-01/status"}, {"POST", "/api/admin/ops/servers/online-players/1/kick"},
+		{"POST", "/api/admin/ops/characters/1/grants/rewards"}, {"POST", "/api/admin/ops/characters/1/lottery/draw"},
+		{"POST", "/api/admin/ops/characters/1/lottery/commit-preview"},
+		{"POST", "/api/admin/ops/compensation/preview"}, {"GET", "/api/admin/ops/compensation/previews/preview_test"}, {"GET", "/api/admin/ops/compensation/previews/preview_test/targets"}, {"POST", "/api/admin/ops/compensation/commit"},
+		{"GET", "/api/admin/ops/payments/economy-orders/order-01/trace"}, {"POST", "/api/admin/ops/payments/economy-orders/order-01/recover"},
 	}
-	out := []endpoint{{"GET", "/health", 200}}
+	out := []endpoint{{"GET", "/health", 200}, {"GET", "/ready", 200}}
 	for _, item := range paths {
-		out = append(out, endpoint{item.method, item.path, 401})
+		want := http.StatusUnauthorized
+		if item.path == "/api/admin/auth/nonce" || item.path == "/api/admin/auth/login" {
+			want = http.StatusBadRequest
+		}
+		out = append(out, endpoint{item.method, item.path, want})
 	}
 	return out
 }

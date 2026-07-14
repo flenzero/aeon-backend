@@ -2,7 +2,7 @@
   "items": [
     {
       "itemId": "shadow_iron",
-      "displayName": "Shadow Iron",
+      "displayName": "粗粝影铁矿",
       "category": "material",
       "rarity": 1,
       "maxStack": 999,
@@ -10,7 +10,7 @@
     },
     {
       "itemId": "gloomcap_spore",
-      "displayName": "Gloomcap Spore",
+      "displayName": "原生幽蕈孢子团",
       "category": "material",
       "rarity": 2,
       "maxStack": 999,
@@ -18,7 +18,7 @@
     },
     {
       "itemId": "aeon_shard",
-      "displayName": "Aeon Shard",
+      "displayName": "纯净永劫碎片",
       "category": "rare_material",
       "rarity": 4,
       "maxStack": 99,
@@ -28,7 +28,7 @@
     },
     {
       "itemId": "market_stall_permit",
-      "displayName": "Market Stall Permit",
+      "displayName": "集市摊位许可证",
       "category": "consumable",
       "rarity": 3,
       "maxStack": 99,
@@ -37,8 +37,18 @@
       "defaultBindType": "BOUND"
     },
     {
+      "itemId": "aeb_exchange_voucher",
+      "displayName": "AEB兑换券",
+      "category": "aeb_voucher",
+      "rarity": 5,
+      "maxStack": 99,
+      "isEquipment": false,
+      "tradable": false,
+      "defaultBindType": "BOUND"
+    },
+    {
       "itemId": "rusted_saber",
-      "displayName": "Rusted Saber",
+      "displayName": "锈蚀军刀",
       "category": "weapon",
       "rarity": 1,
       "maxStack": 1,
@@ -49,7 +59,7 @@
     },
     {
       "itemId": "nightglass_staff",
-      "displayName": "Nightglass Staff",
+      "displayName": "夜璃法杖",
       "category": "weapon",
       "rarity": 3,
       "maxStack": 1,
@@ -60,7 +70,7 @@
     },
     {
       "itemId": "emberroot_seed",
-      "displayName": "Emberroot Seed",
+      "displayName": "烬根种子",
       "category": "seed",
       "rarity": 1,
       "maxStack": 999,
@@ -68,9 +78,275 @@
     },
     {
       "itemId": "emberroot",
-      "displayName": "Emberroot",
+      "displayName": "烬根",
       "category": "crop",
       "rarity": 1,
+      "maxStack": 999,
+      "isEquipment": false
+    },
+    {
+      "itemId": "ashwood_white",
+      "displayName": "粗粝灰木",
+      "category": "material",
+      "rarity": 1,
+      "maxStack": 999,
+      "isEquipment": false,
+      "tradable": true,
+      "defaultBindType": "UNBOUND"
+    },
+    {
+      "itemId": "ashwood_green",
+      "displayName": "原生灰木",
+      "category": "material",
+      "rarity": 2,
+      "maxStack": 999,
+      "isEquipment": false,
+      "tradable": true,
+      "defaultBindType": "UNBOUND"
+    },
+    {
+      "itemId": "ashwood_blue",
+      "displayName": "精炼灰木",
+      "category": "rare_material",
+      "rarity": 3,
+      "maxStack": 999,
+      "isEquipment": false,
+      "tradable": true,
+      "defaultBindType": "UNBOUND"
+    },
+    {
+      "itemId": "ashwood_purple",
+      "displayName": "纯净灰木",
+      "category": "rare_material",
+      "rarity": 4,
+      "maxStack": 999,
+      "isEquipment": false,
+      "tradable": true,
+      "defaultBindType": "UNBOUND"
+    },
+    {
+      "itemId": "gloomstone_white",
+      "displayName": "粗粝幽辉石",
+      "category": "material",
+      "rarity": 1,
+      "maxStack": 999,
+      "isEquipment": false,
+      "tradable": true,
+      "defaultBindType": "UNBOUND"
+    },
+    {
+      "itemId": "gloomstone_green",
+      "displayName": "原生幽辉石",
+      "category": "material",
+      "rarity": 2,
+      "maxStack": 999,
+      "isEquipment": false,
+      "tradable": true,
+      "defaultBindType": "UNBOUND"
+    },
+    {
+      "itemId": "gloomstone_blue",
+      "displayName": "精炼幽辉石",
+      "category": "rare_material",
+      "rarity": 3,
+      "maxStack": 999,
+      "isEquipment": false,
+      "tradable": true,
+      "defaultBindType": "UNBOUND"
+    },
+    {
+      "itemId": "gloomstone_purple",
+      "displayName": "纯净幽辉石",
+      "category": "rare_material",
+      "rarity": 4,
+      "maxStack": 999,
+      "isEquipment": false,
+      "tradable": true,
+      "defaultBindType": "UNBOUND"
+    },
+    {
+      "itemId": "shadow_iron_white",
+      "displayName": "粗粝影铁",
+      "category": "material",
+      "rarity": 1,
+      "maxStack": 999,
+      "isEquipment": false,
+      "tradable": true,
+      "defaultBindType": "UNBOUND"
+    },
+    {
+      "itemId": "shadow_iron_green",
+      "displayName": "原生影铁",
+      "category": "material",
+      "rarity": 2,
+      "maxStack": 999,
+      "isEquipment": false,
+      "tradable": true,
+      "defaultBindType": "UNBOUND"
+    },
+    {
+      "itemId": "shadow_iron_blue",
+      "displayName": "精炼影铁",
+      "category": "rare_material",
+      "rarity": 3,
+      "maxStack": 999,
+      "isEquipment": false,
+      "tradable": true,
+      "defaultBindType": "UNBOUND"
+    },
+    {
+      "itemId": "shadow_iron_purple",
+      "displayName": "纯净影铁",
+      "category": "rare_material",
+      "rarity": 4,
+      "maxStack": 999,
+      "isEquipment": false,
+      "tradable": true,
+      "defaultBindType": "UNBOUND"
+    },
+    {
+      "itemId": "gloomcap_spore_white",
+      "displayName": "粗粝幽蕈孢子",
+      "category": "material",
+      "rarity": 1,
+      "maxStack": 999,
+      "isEquipment": false,
+      "tradable": true,
+      "defaultBindType": "UNBOUND"
+    },
+    {
+      "itemId": "gloomcap_spore_green",
+      "displayName": "原生幽蕈孢子",
+      "category": "material",
+      "rarity": 2,
+      "maxStack": 999,
+      "isEquipment": false,
+      "tradable": true,
+      "defaultBindType": "UNBOUND"
+    },
+    {
+      "itemId": "gloomcap_spore_blue",
+      "displayName": "精炼幽蕈孢子",
+      "category": "rare_material",
+      "rarity": 3,
+      "maxStack": 999,
+      "isEquipment": false,
+      "tradable": true,
+      "defaultBindType": "UNBOUND"
+    },
+    {
+      "itemId": "gloomcap_spore_purple",
+      "displayName": "纯净幽蕈孢子",
+      "category": "rare_material",
+      "rarity": 4,
+      "maxStack": 999,
+      "isEquipment": false,
+      "tradable": true,
+      "defaultBindType": "UNBOUND"
+    },
+    {
+      "itemId": "boss_ticket_ashen_threshold",
+      "displayName": "烬灰门槛印记",
+      "category": "boss_ticket",
+      "rarity": 4,
+      "maxStack": 99,
+      "isEquipment": false,
+      "tradable": true,
+      "defaultBindType": "UNBOUND"
+    },
+    {
+      "itemId": "boss_ticket_gloomwood",
+      "displayName": "幽林狩猎印",
+      "category": "boss_ticket",
+      "rarity": 4,
+      "maxStack": 99,
+      "isEquipment": false,
+      "tradable": true,
+      "defaultBindType": "UNBOUND"
+    },
+    {
+      "itemId": "boss_ticket_voidscar",
+      "displayName": "虚痕安魂钥",
+      "category": "boss_ticket",
+      "rarity": 4,
+      "maxStack": 99,
+      "isEquipment": false,
+      "tradable": true,
+      "defaultBindType": "UNBOUND"
+    },
+    {
+      "itemId": "bounty_badge_common",
+      "displayName": "普通委托徽章",
+      "category": "bounty_badge",
+      "rarity": 2,
+      "maxStack": 999,
+      "isEquipment": false,
+      "tradable": false,
+      "defaultBindType": "BOUND"
+    },
+    {
+      "itemId": "bounty_badge_rare",
+      "displayName": "精良委托徽章",
+      "category": "bounty_badge",
+      "rarity": 3,
+      "maxStack": 999,
+      "isEquipment": false,
+      "tradable": false,
+      "defaultBindType": "BOUND"
+    },
+    {
+      "itemId": "enhancement_stone_t1",
+      "displayName": "缚灰强化石",
+      "category": "enhancement_stone",
+      "rarity": 1,
+      "maxStack": 999,
+      "isEquipment": false
+    },
+    {
+      "itemId": "enhancement_stone_t5",
+      "displayName": "幽皮强化石",
+      "category": "enhancement_stone",
+      "rarity": 2,
+      "maxStack": 999,
+      "isEquipment": false
+    },
+    {
+      "itemId": "enhancement_stone_t10",
+      "displayName": "影铁强化石",
+      "category": "enhancement_stone",
+      "rarity": 3,
+      "maxStack": 999,
+      "isEquipment": false
+    },
+    {
+      "itemId": "enhancement_stone_t15",
+      "displayName": "夜璃强化石",
+      "category": "enhancement_stone",
+      "rarity": 4,
+      "maxStack": 999,
+      "isEquipment": false
+    },
+    {
+      "itemId": "enhancement_stone_t20",
+      "displayName": "蚀日卫强化石",
+      "category": "enhancement_stone",
+      "rarity": 4,
+      "maxStack": 999,
+      "isEquipment": false
+    },
+    {
+      "itemId": "enhancement_stone_t25",
+      "displayName": "虚铸强化石",
+      "category": "enhancement_stone",
+      "rarity": 5,
+      "maxStack": 999,
+      "isEquipment": false
+    },
+    {
+      "itemId": "enhancement_stone_t30",
+      "displayName": "永劫蚀光强化石",
+      "category": "enhancement_stone",
+      "rarity": 6,
       "maxStack": 999,
       "isEquipment": false
     }

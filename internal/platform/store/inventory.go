@@ -68,7 +68,7 @@ func (s *PostgresStore) WarehouseOrganize(req EconomyActionRequest, warehouseSlo
 }
 
 func (s *PostgresStore) InventoryDiscard(req InventoryDiscardRequest) (EconomySnapshot, error) {
-	return runIdempotentAction(s, "inventory_discard", req.OpID, req.AccountID, req.CharacterID, func(ctx context.Context, tx pgx.Tx) (EconomySnapshot, error) {
+	return runIdempotentAction(s, "inventory_discard", req.OpID, req.AccountID, req.CharacterID, req, func(ctx context.Context, tx pgx.Tx) (EconomySnapshot, error) {
 		if err := s.lockCharacter(ctx, tx, req.AccountID, req.CharacterID); err != nil {
 			return EconomySnapshot{}, err
 		}
@@ -145,7 +145,7 @@ func (s *PostgresStore) Synthesize(req SynthesizeRequest) (EconomySnapshot, erro
 	if trim(req.RecipeID) == "" {
 		return EconomySnapshot{}, errors.New("recipeId is required")
 	}
-	return runIdempotentAction(s, "inventory_synthesize", req.OpID, req.AccountID, req.CharacterID, func(ctx context.Context, tx pgx.Tx) (EconomySnapshot, error) {
+	return runIdempotentAction(s, "inventory_synthesize", req.OpID, req.AccountID, req.CharacterID, req, func(ctx context.Context, tx pgx.Tx) (EconomySnapshot, error) {
 		if err := s.lockCharacter(ctx, tx, req.AccountID, req.CharacterID); err != nil {
 			return EconomySnapshot{}, err
 		}

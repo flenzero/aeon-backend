@@ -205,17 +205,18 @@ migrations/updates/
 ```
 
 The full schema file remains canonical and must be updated with every accepted
-incremental change. Docker fresh initialization mounts only the full schema
-file, so update scripts are not replayed on top of a complete new database.
+incremental change. Docker and application startup never apply it. A technician
+must explicitly run `scripts/db-migrate.sh bootstrap` for a new database or
+`scripts/db-migrate.sh up` for an existing database.
 
 It includes:
 
 - account identity, wallet login nonce, refresh token, sessions
 - characters
 - game server registry, launch tickets, online sessions, server commands
-- account GAME balances, character Gold/Gems/Stamina
+- account AEB balances, character Gold/Gems/Stamina
 - economy ledger
-- locked GAME cooldown records
+- locked AEB cooldown records
 - system consumption split records
 - Gold conversion windows and global economy windows
 - item catalog, inventory, equipment, loot tray
@@ -254,7 +255,7 @@ The migration created 43 public tables in `aeonblight_game`. The full schema was
 also applied cleanly to an independent validation database,
 `aeonblight_schema_check_codex`, with the schema migration marker
 `aeonblight_full_schema`. The integration test covers wallet nonce persistence,
-account/character creation, locked GAME unlock settlement, withdrawal
+account/character creation, locked AEB unlock settlement, withdrawal
 processing, economy snapshot reads, warehouse moves, equipment equip/unequip and
 equipment uniqueness constraints. It also covers economy JSON config loading,
 dungeon enter/finish idempotency, run ownership/status validation, submitted exp
