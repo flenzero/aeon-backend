@@ -6,8 +6,10 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/flenzero/aeon-backend/internal/chain"
 	"github.com/flenzero/aeon-backend/internal/platform/config"
@@ -91,6 +93,12 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("POST /api/auth/refresh", h.refresh)
 	mux.HandleFunc("POST /api/auth/logout", httpx.RequireJWT(h.cfg, h.logout))
 	mux.HandleFunc("GET /api/auth/verify", httpx.RequireJWT(h.cfg, h.verify))
+	mux.HandleFunc("GET /api/public/servers", h.publicServers)
+	mux.HandleFunc("GET /api/public/servers/online", h.publicOnlineServers)
+	mux.HandleFunc("GET /api/public/home/stats", h.publicHomeStats)
+	mux.HandleFunc("GET /api/public/home/config", h.publicHomeConfig)
+	mux.HandleFunc("GET /api/public/leaderboards/clear-progress", h.publicClearProgressLeaderboard)
+	mux.HandleFunc("GET /api/public/leaderboards/weekly-score", h.publicWeeklyScoreLeaderboard)
 	gameplay := func(next http.HandlerFunc) http.HandlerFunc {
 		return httpx.RequireService(h.cfg, h.store, "account.gameplay", next)
 	}
@@ -100,6 +108,9 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /api/auth/session/redis", accountOps(h.redisStatus))
 	mux.HandleFunc("GET /api/character/list", gameplay(h.characterList))
 	mux.HandleFunc("POST /api/character/create", gameplay(h.characterCreate))
+	mux.HandleFunc("POST /api/character/delete", gameplay(h.characterDelete))
+	mux.HandleFunc("GET /api/player/profile", gameplay(h.playerProfile))
+	mux.HandleFunc("POST /api/player/save", gameplay(h.playerSave))
 	mux.HandleFunc("POST /api/game/launch", httpx.RequireJWT(h.cfg, h.launch))
 	mux.HandleFunc("GET /api/game/dungeon/recovery", httpx.RequireJWT(h.cfg, h.dungeonRecovery))
 	mux.HandleFunc("POST /api/game/dungeon/recovery", httpx.RequireJWT(h.cfg, h.resolveDungeonRecovery))
@@ -261,13 +272,14 @@ func (h *Handler) characterCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		Name string `json:"name"`
+		Name       string         `json:"name"`
+		Appearance map[string]any `json:"appearance"`
 	}
 	if !httpx.Decode(r, &body) {
 		httpx.Error(w, http.StatusBadRequest, 400, "invalid JSON body")
 		return
 	}
-	character, err := h.service.CreateCharacter(accountID, body.Name)
+	character, err := h.service.CreateCharacterWithAppearance(accountID, body.Name, body.Appearance)
 	if err != nil {
 		httpx.Error(w, http.StatusBadRequest, 2005, err.Error())
 		return
@@ -275,33 +287,141 @@ func (h *Handler) characterCreate(w http.ResponseWriter, r *http.Request) {
 	httpx.Created(w, character)
 }
 
-func (h *Handler) launch(w http.ResponseWriter, r *http.Request) {
-	accountID, _ := httpx.ContextAccountID(r)
+func (h *Handler) characterDelete(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		CharacterID int64  `json:"characterId"`
-		SessionID   string `json:"sessionId"`
-		ServerID    string `json:"serverId"`
+		AccountID   int64 `json:"accountId"`
+		CharacterID int64 `json:"characterId"`
 	}
 	if !httpx.Decode(r, &body) {
 		httpx.Error(w, http.StatusBadRequest, 400, "invalid JSON body")
 		return
 	}
-	if body.CharacterID == 0 {
-		body.CharacterID, _ = strconv.ParseInt(r.URL.Query().Get("characterId"), 10, 64)
+	accountID := body.AccountID
+	if accountID == 0 {
+		var err error
+		accountID, err = httpx.AccountID(r)
+		if err != nil {
+			httpx.Error(w, http.StatusBadRequest, 2006, err.Error())
+			return
+		}
 	}
-	result, err := h.service.Launch(accountID, body.CharacterID, body.SessionID, body.ServerID)
+	if body.CharacterID <= 0 {
+		httpx.Error(w, http.StatusBadRequest, 2007, "characterId is required")
+		return
+	}
+	if err := h.service.DeleteCharacter(accountID, body.CharacterID); err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, store.ErrNotFound) {
+			status = http.StatusNotFound
+		}
+		httpx.Error(w, status, 2008, err.Error())
+		return
+	}
+	httpx.OK(w, map[string]any{})
+}
+
+func (h *Handler) playerProfile(w http.ResponseWriter, r *http.Request) {
+	accountID, err := httpx.AccountID(r)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 2006, err.Error())
+		return
+	}
+	characterID, err := httpx.CharacterID(r)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 2007, err.Error())
+		return
+	}
+	player, economy, err := h.service.PlayerProfile(accountID, characterID)
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, store.ErrNotFound) {
+			status = http.StatusNotFound
+		}
+		httpx.Error(w, status, 2008, err.Error())
+		return
+	}
+	httpx.OK(w, map[string]any{
+		"player":         player,
+		"economy":        economy,
+		"appearanceJson": player.Appearance,
+		"characterName":  player.CharacterName,
+	})
+}
+
+func (h *Handler) playerSave(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		AccountID   int64    `json:"accountId"`
+		CharacterID int64    `json:"characterId"`
+		PosX        *float64 `json:"posX"`
+		PosY        *float64 `json:"posY"`
+		CurrentMap  string   `json:"currentMap"`
+		PlayTimeSec *int64   `json:"playTimeSec"`
+		Hunger      *float64 `json:"hunger"`
+	}
+	if !httpx.Decode(r, &body) {
+		httpx.Error(w, http.StatusBadRequest, 400, "invalid JSON body")
+		return
+	}
+	accountID := body.AccountID
+	if accountID == 0 {
+		var err error
+		accountID, err = httpx.AccountID(r)
+		if err != nil {
+			httpx.Error(w, http.StatusBadRequest, 2006, err.Error())
+			return
+		}
+	}
+	if body.CharacterID == 0 {
+		var err error
+		body.CharacterID, err = httpx.CharacterID(r)
+		if err != nil {
+			httpx.Error(w, http.StatusBadRequest, 2007, err.Error())
+			return
+		}
+	}
+	if body.PosX == nil || body.PosY == nil || body.PlayTimeSec == nil || body.Hunger == nil {
+		httpx.Error(w, http.StatusBadRequest, 2009, "posX, posY, playTimeSec, and hunger are required")
+		return
+	}
+	err := h.service.SavePlayerState(store.PlayerSaveRequest{
+		AccountID: accountID, CharacterID: body.CharacterID,
+		PosX: *body.PosX, PosY: *body.PosY, CurrentMap: body.CurrentMap,
+		PlayTimeSec: *body.PlayTimeSec, Hunger: *body.Hunger,
+	})
+	if err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, store.ErrNotFound) {
+			status = http.StatusNotFound
+		}
+		httpx.Error(w, status, 2009, err.Error())
+		return
+	}
+	httpx.OK(w, map[string]any{})
+}
+
+func (h *Handler) launch(w http.ResponseWriter, r *http.Request) {
+	accountID, _ := httpx.ContextAccountID(r)
+	var body struct {
+		SessionID string `json:"sessionId"`
+		ServerID  string `json:"serverId"`
+	}
+	if !httpx.Decode(r, &body) {
+		httpx.Error(w, http.StatusBadRequest, 400, "invalid JSON body")
+		return
+	}
+	result, err := h.service.Launch(accountID, body.SessionID, body.ServerID)
 	if err != nil {
 		httpx.Error(w, http.StatusBadRequest, 4013, err.Error())
 		return
 	}
+	result.GameURL = launchGameURL(h.cfg.GameClientBaseURL, result)
 	httpx.OK(w, result)
 }
 
 func (h *Handler) consumeTicket(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Ticket       string `json:"ticket"`
-		ServerID     string `json:"serverId"`
-		ConnectionID string `json:"connectionId"`
+		Ticket   string `json:"ticket"`
+		ServerID string `json:"serverId"`
 	}
 	if !httpx.Decode(r, &body) {
 		httpx.Error(w, http.StatusBadRequest, 400, "invalid JSON body")
@@ -310,12 +430,110 @@ func (h *Handler) consumeTicket(w http.ResponseWriter, r *http.Request) {
 	if !requireServerSubject(w, r, body.ServerID) {
 		return
 	}
-	result, err := h.service.ConsumeTicket(body.Ticket, body.ServerID, body.ConnectionID)
+	result, err := h.service.ConsumeTicket(body.Ticket, body.ServerID)
 	if err != nil {
 		httpx.Error(w, http.StatusUnauthorized, 4013, err.Error())
 		return
 	}
 	httpx.OK(w, result)
+}
+
+func (h *Handler) publicServers(w http.ResponseWriter, r *http.Request) {
+	items, err := h.service.PublicGameServers(false)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 4103, err.Error())
+		return
+	}
+	httpx.OK(w, map[string]any{"servers": items})
+}
+
+func (h *Handler) publicOnlineServers(w http.ResponseWriter, r *http.Request) {
+	items, err := h.service.PublicGameServers(true)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 4103, err.Error())
+		return
+	}
+	httpx.OK(w, map[string]any{"servers": items})
+}
+
+func (h *Handler) publicHomeStats(w http.ResponseWriter, r *http.Request) {
+	stats, err := h.service.HomeStats()
+	if err != nil {
+		httpx.Error(w, http.StatusInternalServerError, 4300, err.Error())
+		return
+	}
+	httpx.OK(w, stats)
+}
+
+func (h *Handler) publicHomeConfig(w http.ResponseWriter, r *http.Request) {
+	wallets := h.cfg.SupportWallets
+	if len(wallets) == 0 {
+		wallets = []string{"phantom", "solflare", "backpack", "okx"}
+	}
+	tokenSymbol := strings.TrimSpace(h.cfg.TokenSymbol)
+	if tokenSymbol == "" {
+		tokenSymbol = "AEB"
+	}
+	httpx.OK(w, map[string]any{
+		"contractAddress":   strings.TrimSpace(h.cfg.SolanaTokenMint),
+		"tokenSymbol":       tokenSymbol,
+		"gameClientBaseUrl": strings.TrimSpace(h.cfg.GameClientBaseURL),
+		"supportWallets":    wallets,
+		"updatedAt":         time.Now().UTC(),
+	})
+}
+
+func (h *Handler) publicClearProgressLeaderboard(w http.ResponseWriter, r *http.Request) {
+	limit, _, err := httpx.Pagination(r, 10, 100)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 400, err.Error())
+		return
+	}
+	result, err := h.service.ClearProgressLeaderboard(limit)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 4200, err.Error())
+		return
+	}
+	httpx.OK(w, result)
+}
+
+func (h *Handler) publicWeeklyScoreLeaderboard(w http.ResponseWriter, r *http.Request) {
+	limit, _, err := httpx.Pagination(r, 10, 100)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 400, err.Error())
+		return
+	}
+	result, err := h.service.WeeklyScoreLeaderboard(time.Now().UTC(), limit)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 4201, err.Error())
+		return
+	}
+	httpx.OK(w, result)
+}
+
+func launchGameURL(base string, result LaunchResult) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		return ""
+	}
+	parsed, err := url.Parse(base)
+	if err != nil {
+		return ""
+	}
+	query := parsed.Query()
+	query.Set("ticket", result.Ticket)
+	query.Set("serverId", result.ServerID)
+	query.Set("host", result.Host)
+	query.Set("port", strconv.Itoa(result.Port))
+	query.Set("walletAddress", result.WalletAddress)
+	if strings.TrimSpace(result.WalletPlugin) != "" {
+		query.Set("walletPlugin", result.WalletPlugin)
+	}
+	if strings.TrimSpace(result.PublicEndpoint) != "" {
+		query.Set("publicEndpoint", result.PublicEndpoint)
+	}
+	parsed.RawQuery = query.Encode()
+	return parsed.String()
 }
 
 func (h *Handler) registerServer(w http.ResponseWriter, r *http.Request) {

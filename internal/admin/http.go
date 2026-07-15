@@ -53,6 +53,13 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /api/admin/equipment/{equipmentUid}", httpx.RequireAdmin(h.cfg, h.store, h.getEquipment))
 	mux.HandleFunc("GET /api/admin/catalog/items", httpx.RequireAdmin(h.cfg, h.store, h.listCatalogItems))
 
+	mux.HandleFunc("GET /api/admin/announcements", httpx.RequireAdmin(h.cfg, h.store, h.listAnnouncements))
+	mux.HandleFunc("GET /api/admin/announcements/templates", httpx.RequireAdmin(h.cfg, h.store, h.listAnnouncementTemplates))
+	mux.HandleFunc("PUT /api/admin/announcements/templates/{code}", httpx.RequireAdmin(h.cfg, h.store, h.upsertAnnouncementTemplate))
+	mux.HandleFunc("POST /api/admin/announcements/notices", httpx.RequireAdmin(h.cfg, h.store, h.createOpsAnnouncement))
+	mux.HandleFunc("PUT /api/admin/announcements/notices/{announcementId}", httpx.RequireAdmin(h.cfg, h.store, h.updateOpsAnnouncement))
+	mux.HandleFunc("POST /api/admin/announcements/{announcementId}/revoke", httpx.RequireAdmin(h.cfg, h.store, h.revokeAnnouncement))
+
 	mux.HandleFunc("GET /api/admin/market/restrictions", httpx.RequireAdmin(h.cfg, h.store, h.listMarketRestrictions))
 	mux.HandleFunc("POST /api/admin/market/restrictions", httpx.RequireAdmin(h.cfg, h.store, h.createMarketRestriction))
 	mux.HandleFunc("POST /api/admin/market/restrictions/revoke", httpx.RequireAdmin(h.cfg, h.store, h.revokeMarketRestriction))

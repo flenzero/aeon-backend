@@ -366,7 +366,7 @@ func TestGameServerIdentityIsBoundToItsServerAcrossGameplayRoutes(t *testing.T) 
 		target string
 		body   string
 	}{
-		{name: "consume ticket", method: http.MethodPost, target: "/api/game/launch/consume", body: `{"ticket":"invalid","serverId":"beijing-01","connectionId":"conn"}`},
+		{name: "consume ticket", method: http.MethodPost, target: "/api/game/launch/consume", body: `{"ticket":"invalid","serverId":"beijing-01"}`},
 		{name: "server heartbeat", method: http.MethodPost, target: "/api/game/servers/heartbeat", body: `{"serverId":"beijing-01","onlinePlayers":1}`},
 		{name: "online enter", method: http.MethodPost, target: "/api/game/online/enter", body: `{"accountId":42,"characterId":7,"sessionId":"session-42","serverId":"beijing-01","connectionId":"conn-42"}`},
 		{name: "online list", method: http.MethodGet, target: "/api/game/online/server?serverId=beijing-01"},

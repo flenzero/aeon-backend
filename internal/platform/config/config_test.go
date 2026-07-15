@@ -94,6 +94,27 @@ func TestLoadReadsRuntimeProfileControls(t *testing.T) {
 	}
 }
 
+func TestLoadReadsPublicHomeConfig(t *testing.T) {
+	t.Setenv("AEONBLIGHT_SKIP_LOCAL_ENV", "true")
+	t.Setenv("APP_PROFILE", "test")
+	t.Setenv("TOKEN_SYMBOL", "AEBT")
+	t.Setenv("SUPPORT_WALLETS", "phantom, solflare,,okx")
+
+	cfg := Load("account-api", ":8081")
+	if cfg.TokenSymbol != "AEBT" {
+		t.Fatalf("TokenSymbol = %q", cfg.TokenSymbol)
+	}
+	want := []string{"phantom", "solflare", "okx"}
+	if len(cfg.SupportWallets) != len(want) {
+		t.Fatalf("SupportWallets = %#v", cfg.SupportWallets)
+	}
+	for i := range want {
+		if cfg.SupportWallets[i] != want[i] {
+			t.Fatalf("SupportWallets = %#v", cfg.SupportWallets)
+		}
+	}
+}
+
 func TestLoadAllowsExplicitEmptyInternalKey(t *testing.T) {
 	t.Setenv("AEONBLIGHT_SKIP_LOCAL_ENV", "true")
 	t.Setenv("APP_PROFILE", "staging")

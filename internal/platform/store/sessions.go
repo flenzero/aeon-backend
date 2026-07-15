@@ -119,6 +119,16 @@ func (s *PostgresStore) CreateAccountSession(req CreateSessionRequest) (AccountS
 	}, nil
 }
 
+func (s *PostgresStore) CountMonthlyActiveAccounts(since time.Time) (int, error) {
+	var count int
+	err := s.pool.QueryRow(context.Background(), `
+		SELECT COUNT(DISTINCT account_id)::int
+		FROM account_sessions
+		WHERE last_seen_at >= $1
+	`, since.UTC()).Scan(&count)
+	return count, err
+}
+
 func (s *PostgresStore) GetAccountSession(sessionID string) (AccountSession, error) {
 	ctx := context.Background()
 	var row AccountSession

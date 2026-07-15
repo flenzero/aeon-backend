@@ -100,29 +100,53 @@ CREATE TABLE IF NOT EXISTS characters (
   id BIGSERIAL PRIMARY KEY,
   account_id BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
+  slot_index INTEGER NOT NULL DEFAULT 0,
   class_key TEXT,
   level INTEGER NOT NULL DEFAULT 1,
   exp BIGINT NOT NULL DEFAULT 0,
-  map_id TEXT,
-  position JSONB NOT NULL DEFAULT '{}'::jsonb,
   appearance JSONB NOT NULL DEFAULT '{}'::jsonb,
   bag_expand_count INTEGER NOT NULL DEFAULT 0,
   highest_cleared_chapter INTEGER NOT NULL DEFAULT 0,
   highest_cleared_floor INTEGER NOT NULL DEFAULT 0,
+  highest_cleared_at TIMESTAMPTZ,
   dungeon_clear_count BIGINT NOT NULL DEFAULT 0,
   last_dungeon_cleared_at TIMESTAMPTZ,
   is_deleted BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT chk_characters_slot_index
+    CHECK (slot_index >= 0),
   CONSTRAINT chk_characters_bag_expand_nonnegative
     CHECK (bag_expand_count >= 0)
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_characters_account_slot_active
+  ON characters(account_id, slot_index)
+  WHERE is_deleted = FALSE;
 
 CREATE INDEX IF NOT EXISTS idx_characters_account
   ON characters(account_id, is_deleted, id);
 
 CREATE INDEX IF NOT EXISTS idx_characters_compensation
   ON characters(is_deleted, level, highest_cleared_chapter, highest_cleared_floor);
+
+CREATE TABLE IF NOT EXISTS character_states (
+  character_id BIGINT PRIMARY KEY REFERENCES characters(id) ON DELETE CASCADE,
+  map_id TEXT,
+  position JSONB NOT NULL DEFAULT '{}'::jsonb,
+  play_time_sec BIGINT NOT NULL DEFAULT 0,
+  hunger NUMERIC(8,2) NOT NULL DEFAULT 100,
+  last_played_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT chk_character_states_play_time_nonnegative
+    CHECK (play_time_sec >= 0),
+  CONSTRAINT chk_character_states_hunger_nonnegative
+    CHECK (hunger >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_character_states_last_played
+  ON character_states(last_played_at DESC);
 
 -- ---------------------------------------------------------------------------
 -- Game server discovery, launch tickets and live sessions
@@ -183,7 +207,7 @@ CREATE INDEX IF NOT EXISTS idx_service_request_nonces_expiry
 CREATE TABLE IF NOT EXISTS game_tickets (
   ticket TEXT PRIMARY KEY,
   account_id BIGINT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
-  character_id BIGINT NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
+  character_id BIGINT REFERENCES characters(id) ON DELETE CASCADE,
   session_id TEXT NOT NULL,
   server_id TEXT,
   status TEXT NOT NULL DEFAULT 'ACTIVE',
@@ -1038,6 +1062,78 @@ CREATE TABLE IF NOT EXISTS admin_operation_preview_targets (
 CREATE INDEX IF NOT EXISTS idx_admin_operation_previews_active
   ON admin_operation_previews(admin_id, kind, status, expires_at DESC);
 
+CREATE TABLE IF NOT EXISTS announcement_templates (
+  code TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  title_template TEXT NOT NULL,
+  body_template TEXT NOT NULL,
+  display_mode TEXT NOT NULL DEFAULT 'BANNER',
+  priority INTEGER NOT NULL DEFAULT 50,
+  duration_seconds INTEGER NOT NULL DEFAULT 0,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  updated_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT chk_announcement_templates_kind
+    CHECK (kind IN ('RARE_REWARD', 'OPS_NOTICE')),
+  CONSTRAINT chk_announcement_templates_display
+    CHECK (display_mode IN ('POPUP', 'BANNER')),
+  CONSTRAINT chk_announcement_templates_duration
+    CHECK (duration_seconds >= 0)
+);
+
+CREATE TABLE IF NOT EXISTS announcements (
+  id BIGSERIAL PRIMARY KEY,
+  kind TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'ACTIVE',
+  template_code TEXT REFERENCES announcement_templates(code) ON DELETE SET NULL,
+  display_mode TEXT NOT NULL DEFAULT 'BANNER',
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  priority INTEGER NOT NULL DEFAULT 50,
+  scope TEXT NOT NULL DEFAULT 'GLOBAL',
+  starts_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  ends_at TIMESTAMPTZ,
+  account_id BIGINT REFERENCES accounts(id) ON DELETE SET NULL,
+  character_id BIGINT REFERENCES characters(id) ON DELETE SET NULL,
+  character_name TEXT,
+  event_type TEXT,
+  source TEXT,
+  ref_type TEXT,
+  ref_id TEXT,
+  item_id TEXT,
+  item_name TEXT,
+  equipment_uid TEXT,
+  rarity INTEGER,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+  dedupe_key TEXT,
+  created_by TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  revoked_by TEXT,
+  revoked_at TIMESTAMPTZ,
+  revoke_reason TEXT,
+  CONSTRAINT chk_announcements_kind
+    CHECK (kind IN ('RARE_REWARD', 'OPS_NOTICE')),
+  CONSTRAINT chk_announcements_status
+    CHECK (status IN ('ACTIVE', 'REVOKED')),
+  CONSTRAINT chk_announcements_display
+    CHECK (display_mode IN ('POPUP', 'BANNER')),
+  CONSTRAINT chk_announcements_scope
+    CHECK (scope IN ('GLOBAL')),
+  CONSTRAINT chk_announcements_window
+    CHECK (ends_at IS NULL OR ends_at > starts_at)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_announcements_dedupe
+  ON announcements(dedupe_key)
+  WHERE dedupe_key IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_announcements_active
+  ON announcements(status, starts_at, ends_at, priority DESC, id);
+
+CREATE INDEX IF NOT EXISTS idx_announcements_kind_created
+  ON announcements(kind, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS economy_config_versions (
   id BIGSERIAL PRIMARY KEY,
   config_key TEXT NOT NULL,
@@ -1094,6 +1190,15 @@ VALUES
   )
 ON CONFLICT DO NOTHING;
 
+INSERT INTO announcement_templates (
+  code, kind, title_template, body_template, display_mode, priority, duration_seconds, enabled
+)
+VALUES
+  ('rare_equipment', 'RARE_REWARD', '超稀有装备出现', '恭喜 {characterName} 通过{source}获得 {rarity}星装备 {itemName}', 'POPUP', 900, 12, TRUE),
+  ('rare_mount', 'RARE_REWARD', '稀有坐骑出现', '恭喜 {characterName} 通过{source}获得稀有坐骑 {itemName}', 'POPUP', 950, 12, TRUE),
+  ('ops_notice', 'OPS_NOTICE', '{title}', '{body}', 'BANNER', 500, 0, TRUE)
+ON CONFLICT (code) DO NOTHING;
+
 INSERT INTO schema_migrations (version)
 VALUES
   ('aeonblight_full_schema'),
@@ -1113,5 +1218,9 @@ VALUES
   ('20260713_equipment_npc_recycle_v1'),
   ('20260714_admin_compensation_v1'),
   ('20260714_super_admin_ops_v1'),
-  ('20260714_admin_signed_login_v1')
+  ('20260714_admin_signed_login_v1'),
+  ('20260715_announcements_v1'),
+  ('20260715_account_launch_admission_v1'),
+  ('20260715_player_state_and_slots_v1'),
+  ('20260715_player_state_character_states_v2')
 ON CONFLICT DO NOTHING;

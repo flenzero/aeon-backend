@@ -1,8 +1,8 @@
 # Aeonblight 对外接口详解
 
-版本日期：2026-07-14  
+版本日期：2026-07-15  
 适用服务：`account-api`、`economy-api`  
-接口数量：85  
+接口数量：99 条非管理员路由  
 不包含管理员接口；管理员接口见 [管理员接口文档](admin-interface-reference.md)。快速索引见 [接口列表](interface-list.md)。
 
 ## 1. 通用约定
@@ -96,12 +96,21 @@ X-Service-Signature: <base58-ed25519-signature>
 
 主要字段：`id`、`accountId`、`characterId?`、`purpose`、`payAsset`、`amount`、`receiverWallet?`、`status`、`txSignature?`、`createdAt`、`expiresAt`、`submittedAt?`、`confirmedAt?`、`fulfilledAt?`。
 
-### 2.4 分页
+### 2.4 Announcement
+
+主要字段：`id`、`kind`、`status`、`templateCode?`、`displayMode`、`title`、`body`、`priority`、`scope`、`startsAt`、`endsAt?`、`eventType?`、`source?`、`refType?`、`refId?`、`itemId?`、`itemName?`、`equipmentUid?`、`rarity?`、`createdAt`。
+
+- `kind=OPS_NOTICE`：活动开启、关闭、维护、版本更新等运营通知。
+- `kind=RARE_REWARD`：真实发奖事务生成的稀有装备/坐骑炫耀公告。
+- `displayMode=POPUP` 建议客户端弹窗展示；`BANNER` 建议公告栏/跑马灯展示。
+- 公开公告接口只返回 `OPS_NOTICE`，不会返回玩家稀有掉落。
+
+### 2.5 分页
 
 - Marketplace 公共列表默认 `limit=20`；我的列表默认 `50`；最大均为 `100`。
 - `offset` 必须为非负整数；非法值不会静默回退。
 
-### 2.5 装备配置与服务端权威
+### 2.6 装备配置与服务端权威
 
 - 常规装备阶段为 `1/5/10/15/20/25/30`，品质为白、绿、蓝、紫、金、红（`rarity=1..6`）；品质决定副词条数量 `1..6`。
 - 副词条池与出现权重均由服务端配置决定。相同 `affixId` 最多出现两次；初始值相同，但两个 `instanceId` 的强化命中独立。
@@ -110,6 +119,8 @@ X-Service-Signature: <base58-ed25519-signature>
 - 当前副本为三章全局楼层 `1..30`；`maxExp` 与 `lootPoolId` 由配置决定。`enemyHpScale` / `enemyAtkScale` 为战斗透传字段，economy 结算不使用。
 
 ## 3. account-api
+
+account-api 负责登录、Session、启动器公开信息、角色选择/存档、Launch Ticket 和 Online Presence。玩家客户端只直接调用 JWT/公开接口；`account.gameplay` 接口应由可信游戏服代调。
 
 ### 3.1 健康检查
 
@@ -166,31 +177,95 @@ Body：`{"sessionId":"session_...","refreshToken":"refresh_..."}`。
 - 认证：`account.ops`。
 - 成功：`enabled`、`ok?`、`mode`、`error?`；mode 为 `redis+postgres` 或 `postgres-only`。
 
-### 3.3 角色
+### 3.3 公开选服
+
+#### GET `/api/public/servers`
+
+- 认证：公开；用于主页/启动器选服。
+- 成功：`servers` 数组，只含 `serverId`、`name`、`curPlayers`、`maxPlayers`、`status`、`queueLength`、`region?`。
+- 不返回 `host`、`port`、`publicEndpoint`；连接信息只在 `POST /api/game/launch` 成功时返回。
+- `curPlayers` 来自 Redis Online Presence 的有效 TTL key 聚合；Redis 禁用的测试/开发模式回落到 PostgreSQL `online_sessions` 的有效 `last_seen_at`。
+- `status` 为 `online`、`full`、`offline`；`ONLINE` 且最近 30 秒有心跳、Redis 在线数低于 95% 容量时为 `online`。
+
+#### GET `/api/public/servers/online`
+
+- 认证：公开。
+- 成功：同 `/api/public/servers`，但只返回 `status=online` 的服务器。
+
+#### GET `/api/public/home/stats`
+
+- 认证：公开；用于主页统计条。
+- 成功：`onlinePlayers`、`monthlyActivePlayers`、`updatedAt`。
+- `onlinePlayers` 为全服 Redis Online Presence 有效 TTL key 汇总，和 `/api/public/servers[*].curPlayers` 的求和口径一致。
+- `monthlyActivePlayers` 为最近 30 天 `account_sessions.last_seen_at >= now-30d` 的去重账号数。
+
+#### GET `/api/public/home/config`
+
+- 认证：公开；用于主页无需重新发包即可读取公开配置。
+- 成功：`contractAddress`、`tokenSymbol`、`gameClientBaseUrl`、`supportWallets`、`updatedAt`。
+- `contractAddress` 来自 `SOLANA_TOKEN_MINT`；`tokenSymbol` 来自 `TOKEN_SYMBOL`，默认 `AEB`；`supportWallets` 来自逗号分隔的 `SUPPORT_WALLETS`，默认 `phantom,solflare,backpack,okx`。
+
+#### GET `/api/public/leaderboards/clear-progress`
+
+- 认证：公开；`limit` 默认 10，最大 100。
+- 成功：`intro`、`items`、`updatedAt`。
+- `items` 按 `highestFloorId DESC, firstReachedAt ASC, characterId ASC` 排序；`firstReachedAt` 来自 `characters.highest_cleared_at`，表示第一次达到当前最高进度的时间。
+
+#### GET `/api/public/leaderboards/weekly-score`
+
+- 认证：公开；`limit` 默认 10，最大 100。
+- 成功：`intro`、`period`、`items`、`updatedAt`。
+- 7 天周期从 `2026-07-01T00:00:00Z` 开始；每个已完成副本按 `dungeon_key` 中的 `floor` 加分，允许重复刷同一层累计。
+
+### 3.4 角色、外观与运行态存档
 
 #### GET `/api/character/list`
 
 - 认证：`account.gameplay`；`X-Account-Id` 必填。
-- 成功：`characters` 数组；字段为 `id`、`accountId`、`name`、`createdAt`、`deleted`。
+- 成功：`characters` 数组；字段为 `id`、`accountId`、`name`、`slotIndex`、`level`、`appearance`、`equipmentItems`、`createdAt`、`lastPlayed`、`hasLastPlayed`、`deleted`。
+- `equipmentItems` 只包含当前已穿戴装备，用于角色选择/登录外观展示；背包、仓库、交易行装备不返回。
 
 #### POST `/api/character/create`
 
-Body：`{"name":"Knight"}`。
+Body：`{"name":"Knight","appearance":{"hair":"demo"}}`。
 
 - 认证：`account.gameplay`；`X-Account-Id` 必填。
-- 空白名称使用 `Player`。成功 HTTP `201`；错误 code `2005`/`2006`。
+- 名称为 2-12 个中文、字母、数字或下划线；账号最多 3 个未删除角色，服务端分配 `slotIndex`。成功 HTTP `201`；错误 code `2005`/`2006`。
 
-### 3.4 Launch Ticket 与副本恢复
+#### POST `/api/character/delete`
+
+Body：`{"characterId":10}`；也支持 body 内 `accountId`。
+
+- 认证：`account.gameplay`；默认 `X-Account-Id` 必填。
+- 软删除角色并释放 `slotIndex`；成功返回空对象。
+
+#### GET `/api/player/profile`
+
+- 认证：`account.gameplay`；`X-Account-Id` 与 `X-Character-Id`/`characterId` 必填。
+- 成功：`player`、`economy`、`appearanceJson`、`characterName`。
+
+#### POST `/api/player/save`
+
+Body：`{"characterId":10,"posX":10.5,"posY":20.25,"currentMap":"town","playTimeSec":360,"hunger":92.5}`。
+
+- 认证：`account.gameplay`；默认 `X-Account-Id` 必填，也支持 body 内 `accountId`。
+- 只写非经济运行态：`currentMap` → `character_states.map_id`，`posX/posY` → `character_states.position` 的 `x/y`，`playTimeSec` → `character_states.play_time_sec`，`hunger` → `character_states.hunger`，并刷新 `character_states.last_played_at`。
+- `characters` 保留角色身份、槽位、外观、等级和进度；运行时存档统一由 `character_states` 按 `character_id` 一对一保存。
+- 不接受或不处理金币、AEB、背包、装备、经验等经济字段。
+
+### 3.5 Launch Ticket 与副本恢复
 
 #### POST `/api/game/launch`
 
 ```json
-{"characterId":10,"sessionId":"session_...","serverId":"world-a"}
+{"sessionId":"session_...","serverId":"world-a"}
 ```
 
-- 认证：JWT；校验账号、角色归属和 Session。
-- 有 `STARTED` 副本时只允许原服，否则必须先 abandon。
-- 成功：`status=ready`、`ticket`、`expiresAt`、`serverId`；Ticket 有效期 90 秒。
+- 认证：JWT；校验账号和持久化 Session。
+- `serverId` 可省略；省略时自动选择公开状态为 `online` 且在线人数最少的服务器。
+- 主页不传 `characterId`；传入未知字段会被拒绝。角色选择、创建和副本恢复在客户端进入后完成。
+- 成功：`status=ready`、`ticket`、`expiresIn`、`expiresAt`、`serverId`、`host`、`port`、`publicEndpoint?`、`walletAddress`、`walletPlugin?`、`gameUrl?`；Ticket 有效期 90 秒。
+- `gameUrl` 仅在配置 `GAME_CLIENT_BASE_URL` 时返回，格式为基础 URL 加 `ticket/serverId/host/port/walletAddress/walletPlugin/publicEndpoint?` 查询参数。
 - 错误 code `4013`。
 
 #### GET `/api/game/dungeon/recovery`
@@ -214,14 +289,16 @@ Body：`{"name":"Knight"}`。
 #### POST `/api/game/launch/consume`
 
 ```json
-{"ticket":"ticket_...","serverId":"world-a","connectionId":"connection-01"}
+{"ticket":"ticket_...","serverId":"world-a"}
 ```
 
 - 认证：`account.gameplay`；身份 subject 必须等于 `serverId`。
-- Ticket 必须未过期、未消费并绑定当前服务器。
-- 成功：`ticket` 与 `online`。错误 code `4013`；越权 code `4030`。
+- Ticket 必须未过期、未消费、绑定当前服务器，且对应 Session 仍为 `ACTIVE`。
+- 成功：`accountId`、`walletAddress`、`walletPlugin?`、`sessionId`、`serverId`。不建立 Online Presence。
+- 客户端在游戏内选角后，由游戏服调用 `POST /api/game/online/enter` 绑定 `characterId` 和 `connectionId`。
+- 错误 code `4013`；越权 code `4030`。
 
-### 3.5 游戏服与 Online Presence
+### 3.6 游戏服与 Online Presence
 
 #### POST `/api/game/servers/register`
 
@@ -284,7 +361,14 @@ Body：`{"accountId":1,"connectionId":"connection-01"}`。
 
 所有 `economy.gameplay` 路由由游戏服调用，并携带 `X-Account-Id`；需要角色的接口还应携带 `X-Character-Id` 或在 Body 传 `characterId`。
 
-### 4.1 健康与快照
+推荐调用顺序：
+
+1. 进入游戏后先读 `/api/economy/snapshot`。
+2. 背包、装备、仓库、商店、抽奖和交易市场都使用 `opId` 做幂等。
+3. 链上付款类接口先创建 Payment Order，再提交交易签名，最后由支付操作器确认履约。
+4. Worker/Internal 路由只给后台服务使用，玩家客户端不应直连。
+
+### 4.1 健康、公告与快照
 
 #### GET `/health`
 
@@ -295,12 +379,27 @@ Body：`{"accountId":1,"connectionId":"connection-01"}`。
 - 认证：公开；检查 PostgreSQL、Schema、经济配置；`STUB_MODE=disabled` 时也检查 Solana RPC。
 - Required 依赖失败返回 HTTP `503`。
 
+#### GET `/api/announcements/active`
+
+- 认证：公开。
+- Query：`afterId?`（只返回 ID 大于该值的公告）、`limit?`（默认 50，最大 200）。
+- 只返回当前有效的 `OPS_NOTICE`，即 `startsAt <= now` 且 `endsAt` 为空或晚于当前时间，且未撤销。
+- 成功：`items: Announcement[]`、`count`、`afterId`。
+- 用途：客户端、启动器、官网拉取活动/维护/更新等公开通知。
+
+#### GET `/api/economy/announcements/active`
+
+- 认证：`economy.gameplay`。
+- Query：`afterId?`、`limit?`。
+- 返回当前有效的全服公告流，包括 `OPS_NOTICE` 和 `RARE_REWARD`。
+- 用途：游戏服同步运维通知，以及展示真实发奖事务生成的稀有装备/坐骑弹窗。
+
 #### GET `/api/economy/snapshot`
 
 - 认证：`economy.gameplay`；Header：`X-Account-Id`、`X-Character-Id`。
 - 成功：EconomySnapshot；不存在为 HTTP `404` / code `2008`。
 
-### 4.2 仓库与装备
+### 4.2 仓库、装备与装备回收
 
 以下四个接口共用 Body；不相关字段省略，省略 `slotIndex`/`equipSlot` 时内部值为 `-1`。
 
@@ -352,6 +451,29 @@ Body：`{"opId":"repair-01","characterId":10,"equipmentUid":"eq_..."}`。
 
 > 部署此接口前必须应用数据库更新 `20260713_equipment_npc_recycle_v1`；详见 `migrations/updates/`。
 
+### 4.3 商店、抽奖与悬赏
+
+#### POST `/api/economy/shop/buy`
+
+Body：`{"opId":"buy-01","characterId":10,"shopId":"shop","itemId":"ashwood_white","quantity":1}`。
+
+- 认证：`economy.gameplay`。
+- 商品可买性由 `configs/economy/shops.json` 决定；价格和币种由 `items.json` 的 `buyPrice`、`buyCurrency`、`grantGold` 决定。
+- `buyCurrency=0`：扣角色金币并立即交割，返回 `snapshot`。
+- `buyCurrency=1`：创建 `SHOP_BUY` Payment Order，付款确认后按订单 payload 交割；返回 `order`。
+- 普通物品进入 `inventory_items`；装备类物品创建唯一 `equipment_items` 实例；`grantGold > 0` 的商品只发金币。
+- `buyPrice=0` 或未配置价格时拒绝成交。
+
+#### POST `/api/economy/shop/sell`
+
+普通物品 Body：`{"opId":"sell-01","characterId":10,"shopId":"shop","slotIndex":0,"quantity":1}`。
+
+装备 Body：`{"opId":"sell-eq-01","characterId":10,"shopId":"shop","equipmentUid":"eq_..."}`。
+
+- 认证：`economy.gameplay`。
+- 出售价由 `items.json` 的 `sellPrice` 决定；`sellPrice=0` 或未配置时拒绝成交。
+- 普通物品必须在背包指定槽；装备必须是背包内非 NFT 装备。成功后资产变为 `CONSUMED` 并给角色金币，返回 `snapshot`。
+
 #### POST `/api/economy/lottery/draw`
 
 ```json
@@ -376,11 +498,12 @@ Body：`{"opId":"repair-01","characterId":10,"equipmentUid":"eq_..."}`。
 | POST `/api/economy/bounty/submit-equipment` | `{"opId":"...","characterId":10,"slotIndex":1,"equipmentUid":"..."}` | 仅消耗背包中满足稀有度、非 NFT、未上架的装备。 |
 | POST `/api/economy/bounty/claim` | `{"opId":"...","characterId":10,"slotIndex":1}` | 原子写入任务徽章并将任务标记 CLAIMED。 |
 | POST `/api/economy/bounty/badges/draw` | `{"opId":"...","characterId":10,"badge":"common|rare"}` | 原子扣徽章并发 Gold、物品或 Locked AEB。 |
-- 付款通过既有 `/api/economy/internal/payments/confirm` 确认后，快照奖励进入 Loot Tray；配置后续更新不会影响已支付订单。
-- 成功 HTTP `201`：`order`、`rewards`。`rewards` 是已快照计划，不等于已领取物品；使用已有 Loot Tray 接口领取。
+
+- 涉及 AEB 的悬赏操作通过既有 `/api/economy/internal/payments/confirm` 确认后履约。
+- 配置后续更新不会影响已经创建的 Payment Order。
 - 参数、配置、角色等级或付款接收钱包不合法：HTTP `400` / code `3610`。
 
-### 4.3 NFT
+### 4.4 NFT
 
 #### POST `/api/economy/nft/mint/request`
 
@@ -413,7 +536,7 @@ Body：`{"opId":"mint-cancel-01","requestId":1001}`。
 - 认证：`economy.gameplay`；`X-Account-Id` 必填。
 - 成功：`items: NFTAsset[]`。NFTAsset 主要字段为 `id`、`accountId`、`sourceAssetType`、`sourceAssetId`、`mintAddress?`、`metadataUri?`、`status`、`equipmentUid?`。
 
-### 4.4 Dungeon Run
+### 4.5 副本与掉落
 
 #### POST `/api/economy/dungeon/enter`
 
@@ -450,7 +573,7 @@ Body：`{"opId":"mint-cancel-01","requestId":1001}`。
 - 胜利响应状态为 `REWARDED`，失败/超时为 `FAILED`。
 - 相同 `opId` 重试返回原结果；不同 `opId` 不能二次结算。错误 code `3102`。
 
-### 4.5 Loot Tray
+#### Loot Tray
 
 共用 Body：
 
@@ -563,6 +686,7 @@ Body：`{"opId":"license-01","characterId":10}`。
 - 认证：`economy.gameplay`。
 - 创建 `TRADING_LICENSE` Payment Order。
 - 成功：`order`、`hasLicense`；错误 code `3721`。
+- `/api/economy/license/buy` 是同一处理器的别名。
 
 ### 4.9 Marketplace
 
@@ -667,7 +791,7 @@ Body：`{"amount":100,"wallet":"<solana-wallet>"}`。
 
 ### 4.11 Worker 与链操作命令
 
-以下命令 Body 均必须为 `{}`：
+以下 Worker 命令通常发送 `{}`；`npc-recycle/purge` 可额外传 `limit`：
 
 | 方法与路径 | Capability | 成功响应 | 错误码 |
 | --- | --- | --- | ---: |
@@ -698,9 +822,9 @@ Body：`{"orderId":"uuid","reason":"chain confirmation"}`。
 - 只允许已提交/已确认且具有交易签名的订单；不能直接确认 `PENDING_PAYMENT`。
 - 成功：PaymentOrder；错误 code `3804`。
 
-## 5. 请求与响应示例补全
+## 5. 请求与响应示例
 
-本节按当前 85 条非管理员路由补齐入参和出参示例。除 `/ready` 外，HTTP 接口均返回统一信封：
+本节按调用场景给出常用入参和出参示例。完整接口清单见 [接口列表](interface-list.md)。除 `/ready` 外，HTTP 接口均返回统一信封：
 
 ```json
 {"ok":true,"data":{}}
@@ -794,12 +918,21 @@ Body：`{"orderId":"uuid","reason":"chain confirmation"}`。
 | POST `/api/auth/logout` | Header：`Authorization: Bearer <accessToken>`；Body：`{"sessionId":"session_x","refreshToken":"refresh_y"}` | `{"ok":true,"data":{"status":"revoked","sessionId":"session_x"}}` |
 | GET `/api/auth/verify` | Header：`Authorization: Bearer <accessToken>` | `{"ok":true,"data":{"id":1,"username":"player_1","walletAddress":"<solana-wallet>","isBanned":false,"createdAt":"2026-07-14T10:00:00Z","lastLoginAt":"2026-07-14T10:00:00Z"}}` |
 | GET `/api/auth/session/redis` | Service Identity：`account.ops` | `{"ok":true,"data":{"enabled":true,"ok":true,"mode":"redis+postgres"}}` |
-| GET `/api/character/list` | Service Identity：`account.gameplay`；Header：`X-Account-Id: 1` | `{"ok":true,"data":{"characters":[{"id":10,"accountId":1,"name":"Knight","createdAt":"2026-07-14T10:00:00Z","deleted":false}]}}` |
-| POST `/api/character/create` | Service Identity：`account.gameplay`；Header：`X-Account-Id: 1`；Body：`{"name":"Knight"}` | `{"ok":true,"data":{"id":10,"accountId":1,"name":"Knight","createdAt":"2026-07-14T10:00:00Z","deleted":false}}` |
-| POST `/api/game/launch` | Header：`Authorization: Bearer <accessToken>`；Body：`{"characterId":10,"sessionId":"session_x","serverId":"world-a"}` | `{"ok":true,"data":{"status":"ready","ticket":"ticket_x","expiresAt":"2026-07-14T10:01:30Z","serverId":"world-a"}}` |
+| GET `/api/public/servers` | 无 | `{"ok":true,"data":{"servers":[{"serverId":"world-a","name":"World A","curPlayers":120,"maxPlayers":500,"status":"online","queueLength":0,"region":"ap-east"}]}}` |
+| GET `/api/public/servers/online` | 无 | `{"ok":true,"data":{"servers":[{"serverId":"world-a","name":"World A","curPlayers":120,"maxPlayers":500,"status":"online","queueLength":0,"region":"ap-east"}]}}` |
+| GET `/api/public/home/stats` | 无 | `{"ok":true,"data":{"onlinePlayers":125,"monthlyActivePlayers":263,"updatedAt":"2026-07-15T10:00:00Z"}}` |
+| GET `/api/public/home/config` | 无 | `{"ok":true,"data":{"contractAddress":"solana_token_mint_or_ca","tokenSymbol":"AEB","gameClientBaseUrl":"https://game.example.com","supportWallets":["phantom","solflare","backpack","okx"],"updatedAt":"2026-07-15T10:00:00Z"}}` |
+| GET `/api/public/leaderboards/clear-progress` | Query：`limit=10` | `{"ok":true,"data":{"items":[],"updatedAt":"2026-07-14T10:00:00Z"}}` |
+| GET `/api/public/leaderboards/weekly-score` | Query：`limit=10` | `{"ok":true,"data":{"period":{"periodId":"weekly-score-20260701-0","startsAt":"2026-07-01T00:00:00Z","endsAt":"2026-07-08T00:00:00Z"},"items":[],"updatedAt":"2026-07-14T10:00:00Z"}}` |
+| GET `/api/character/list` | Service Identity：`account.gameplay`；Header：`X-Account-Id: 1` | `{"ok":true,"data":{"characters":[{"id":10,"accountId":1,"name":"Knight","slotIndex":0,"level":1,"appearance":{},"equipmentItems":[],"createdAt":"2026-07-14T10:00:00Z","lastPlayed":"1970-01-01T00:00:00Z","hasLastPlayed":false,"deleted":false}]}}` |
+| POST `/api/character/create` | Service Identity：`account.gameplay`；Header：`X-Account-Id: 1`；Body：`{"name":"Knight","appearance":{}}` | `{"ok":true,"data":{"id":10,"accountId":1,"name":"Knight","slotIndex":0,"level":1,"appearance":{},"equipmentItems":[],"createdAt":"2026-07-14T10:00:00Z","lastPlayed":"1970-01-01T00:00:00Z","hasLastPlayed":false,"deleted":false}}` |
+| POST `/api/character/delete` | Service Identity：`account.gameplay`；Header：`X-Account-Id: 1`；Body：`{"characterId":10}` | `{"ok":true,"data":{}}` |
+| GET `/api/player/profile` | Service Identity：`account.gameplay`；Header：`X-Account-Id: 1`；Query：`characterId=10` | `{"ok":true,"data":{"player":{"characterId":10,"currentMap":"town","posX":10.5,"posY":20.25},"economy":{...},"appearanceJson":{},"characterName":"Knight"}}` |
+| POST `/api/player/save` | Service Identity：`account.gameplay`；Header：`X-Account-Id: 1`；Body：`{"characterId":10,"posX":10.5,"posY":20.25,"currentMap":"town","playTimeSec":360,"hunger":92.5}` | `{"ok":true,"data":{}}` |
+| POST `/api/game/launch` | Header：`Authorization: Bearer <accessToken>`；Body：`{"sessionId":"session_x","serverId":"world-a"}` | `{"ok":true,"data":{"status":"ready","ticket":"ticket_x","expiresIn":90,"expiresAt":"2026-07-14T10:01:30Z","serverId":"world-a","host":"10.0.0.10","port":7001,"publicEndpoint":"wss://world-a.example.com","walletAddress":"<solana-wallet>","walletPlugin":"phantom","gameUrl":"https://client.example/play?ticket=ticket_x&serverId=world-a&host=10.0.0.10&port=7001&walletAddress=<solana-wallet>&walletPlugin=phantom"}}` |
 | GET `/api/game/dungeon/recovery` | Header：`Authorization: Bearer <accessToken>`；Query：`characterId=10` | 无恢复：`{"ok":true,"data":{"required":false}}`；有恢复：`{"ok":true,"data":{"required":true,"status":"STARTED","dungeonRunId":"run_uuid","accountId":1,"characterId":10,"serverId":"world-a","chapterId":1,"floorId":3,"startedAt":"2026-07-14T09:55:00Z"}}` |
 | POST `/api/game/dungeon/recovery` | Header：`Authorization: Bearer <accessToken>`；Body：`{"characterId":10,"dungeonRunId":"run_uuid","action":"resume","sessionId":"session_x"}` | Resume：`{"ok":true,"data":{"action":"resume","status":"RESUME_READY","dungeonRunId":"run_uuid","serverId":"world-a","ticket":"ticket_y","expiresAt":"2026-07-14T10:01:30Z"}}`；Abandon：`{"ok":true,"data":{"action":"abandon","status":"CANCELLED","dungeonRunId":"run_uuid"}}` |
-| POST `/api/game/launch/consume` | Service Identity：`account.gameplay`，subject=`world-a`；Body：`{"ticket":"ticket_x","serverId":"world-a","connectionId":"conn-01"}` | `{"ok":true,"data":{"ticket":{"ticket":"ticket_x","accountId":1,"characterId":10,"serverId":"world-a","sessionId":"session_x","expiresAt":"2026-07-14T10:01:30Z","consumed":true},"online":{"accountId":1,"characterId":10,"sessionId":"session_x","serverId":"world-a","connectionId":"conn-01","enteredAt":"2026-07-14T10:00:10Z","lastSeenAt":"2026-07-14T10:00:10Z"}}}` |
+| POST `/api/game/launch/consume` | Service Identity：`account.gameplay`，subject=`world-a`；Body：`{"ticket":"ticket_x","serverId":"world-a"}` | `{"ok":true,"data":{"accountId":1,"walletAddress":"<solana-wallet>","walletPlugin":"phantom","sessionId":"session_x","serverId":"world-a"}}` |
 | POST `/api/game/servers/register` | Service Identity：`account.gameplay`，subject=`world-a`；Body：`{"serverId":"world-a","displayName":"World A","region":"ap-east","host":"10.0.0.10","port":7001,"publicEndpoint":"wss://world-a.example.com","maxPlayers":500,"onlinePlayers":0,"status":"ONLINE"}` | `{"ok":true,"data":{"serverId":"world-a","displayName":"World A","region":"ap-east","host":"10.0.0.10","port":7001,"publicEndpoint":"wss://world-a.example.com","maxPlayers":500,"onlinePlayers":0,"status":"ONLINE","registeredAt":"2026-07-14T10:00:00Z","lastHeartbeatAt":"2026-07-14T10:00:00Z"}}` |
 | POST `/api/game/servers/heartbeat` | Service Identity：`account.gameplay`，subject=`world-a`；Body：`{"serverId":"world-a","onlinePlayers":120}` | `{"ok":true,"data":{"serverId":"world-a","displayName":"World A","host":"10.0.0.10","port":7001,"maxPlayers":500,"onlinePlayers":120,"status":"ONLINE","registeredAt":"2026-07-14T10:00:00Z","lastHeartbeatAt":"2026-07-14T10:01:00Z"}}` |
 | GET `/api/game/servers` | Service Identity：`account.gameplay`；Query：`status=ONLINE` | `{"ok":true,"data":{"items":[{"serverId":"world-a","displayName":"World A","host":"10.0.0.10","port":7001,"maxPlayers":500,"onlinePlayers":120,"status":"ONLINE","registeredAt":"2026-07-14T10:00:00Z","lastHeartbeatAt":"2026-07-14T10:01:00Z"}]}}` |
@@ -816,7 +949,9 @@ Body：`{"orderId":"uuid","reason":"chain confirmation"}`。
 | --- | --- | --- |
 | GET `/health` | 无 | `{"ok":true,"data":{"service":"economy-api","status":"ok"}}` |
 | GET `/ready` | 无 | `{"ready":true,"service":"economy-api","checks":[{"name":"postgres","status":"ok","required":true},{"name":"economy-rules","status":"ok","required":true}]}` |
+| GET `/api/announcements/active` | 公开；Query：`afterId=0&limit=50` | `{"ok":true,"data":{"items":[{"id":1001,"kind":"OPS_NOTICE","status":"ACTIVE","displayMode":"BANNER","title":"限时活动开启","body":"世界 Boss 活动将于 20:00 开启","priority":700,"scope":"GLOBAL","startsAt":"2026-07-15T12:00:00Z","createdAt":"2026-07-15T11:00:00Z"}],"count":1,"afterId":0}}` |
 | GET `/api/economy/snapshot` | Service Identity：`economy.gameplay`；Header：`X-Account-Id: 1`、`X-Character-Id: 10` | `{"ok":true,"data":{...EconomySnapshot}}` |
+| GET `/api/economy/announcements/active` | Service Identity：`economy.gameplay`；Query：`afterId=0&limit=50` | `{"ok":true,"data":{"items":[...Announcement],"count":2,"afterId":0}}` |
 | POST `/api/economy/warehouse/deposit` | Header：`X-Account-Id: 1`；Body：`{"opId":"wh-deposit-01","characterId":10,"slotIndex":0,"quantity":2}`；装备用 `{"opId":"wh-deposit-eq-01","characterId":10,"equipmentUid":"eq_abc"}` | `{"ok":true,"data":{"snapshot":{...EconomySnapshot}}}` |
 | POST `/api/economy/warehouse/withdraw` | Header：`X-Account-Id: 1`；Body：`{"opId":"wh-withdraw-01","characterId":10,"slotIndex":0,"quantity":2}` 或 `{"opId":"wh-withdraw-eq-01","characterId":10,"equipmentUid":"eq_abc"}` | `{"ok":true,"data":{"snapshot":{...EconomySnapshot}}}` |
 | POST `/api/economy/equipment/equip` | Header：`X-Account-Id: 1`；Body：`{"opId":"equip-01","characterId":10,"equipmentUid":"eq_abc","equipSlot":0}` | `{"ok":true,"data":{"snapshot":{...EconomySnapshot}}}` |
@@ -824,6 +959,8 @@ Body：`{"orderId":"uuid","reason":"chain confirmation"}`。
 | POST `/api/economy/equipment/repair` | Header：`X-Account-Id: 1`；Body：`{"opId":"repair-01","characterId":10,"equipmentUid":"eq_abc"}` | `{"ok":true,"data":{"equipment":{"id":501,"equipmentUid":"eq_abc","itemId":"iron_sword","rarity":3,"enhanceLevel":1,"durability":100,"maxDurability":100,"status":"ACTIVE","equipSlot":-1,"slot":4,"nftContract":null,"nftTokenId":null},"costToken":5,"repairedPoints":5,"snapshot":{...EconomySnapshot}}}` |
 | POST `/api/economy/equipment/enhance` | Header：`X-Account-Id: 1`；Body：`{"opId":"enhance-01","characterId":10,"equipmentUid":"eq_abc"}` | `{"ok":true,"data":{"equipment":{"id":501,"equipmentUid":"eq_abc","itemId":"iron_sword","rarity":3,"enhanceLevel":2,"durability":100,"maxDurability":100,"status":"ACTIVE","equipSlot":-1,"slot":4,"nftContract":null,"nftTokenId":null},"goldCost":100,"stoneItemId":"enhance_stone_t1","stoneQuantity":1,"enhancedAffix":{"affixId":"atk_flat","instanceId":"atk_flat#1","enhanceHits":2,"stat":"attack","value":13.2},"snapshot":{...EconomySnapshot}}}` |
 | POST `/api/economy/equipment/npc-recycle` | Header：`X-Account-Id: 1`；Body：`{"opId":"npc-recycle-01","characterId":10,"equipmentUid":"eq_abc"}` | `{"ok":true,"data":{"goldCredit":120,"expiresAt":"2026-07-21T10:00:00Z","snapshot":{...EconomySnapshot}}}` |
+| POST `/api/economy/shop/buy` | Header：`X-Account-Id: 1`；Body：`{"opId":"shop-buy-01","characterId":10,"shopId":"town-general","itemId":"health_potion","quantity":2}` | 金币商品：`{"ok":true,"data":{"snapshot":{...EconomySnapshot}}}`；链上商品：`{"ok":true,"data":{"order":{...PaymentOrder,"purpose":"SHOP_BUY"}}}` |
+| POST `/api/economy/shop/sell` | 普通物品：`{"opId":"shop-sell-01","characterId":10,"shopId":"town-general","slotIndex":3,"quantity":1}`；装备：`{"opId":"shop-sell-eq-01","characterId":10,"shopId":"town-general","equipmentUid":"eq_abc"}` | `{"ok":true,"data":{"snapshot":{...EconomySnapshot}}}` |
 | POST `/api/economy/lottery/draw` | Header：`X-Account-Id: 1`；Body：`{"opId":"lottery-01","characterId":10,"count":10}` | `{"ok":true,"data":{"order":{...PaymentOrder,"purpose":"LOTTERY_DRAW","amount":300},"rewards":{"IsBoss":false,"Items":[{"RewardType":"item","ItemID":"iron_ore","Quantity":5}],"TokenReward":0}}}` |
 | GET `/api/economy/bounty/board` | Header：`X-Account-Id: 1`、`X-Character-Id: 10` | `{"ok":true,"data":{...BountyBoard}}` |
 | POST `/api/economy/bounty/slots/unlock-gold` | Header：`X-Account-Id: 1`；Body：`{"opId":"bounty-gold-01","characterId":10}` | `{"ok":true,"data":{...BountyBoard}}` |
@@ -856,6 +993,7 @@ Body：`{"orderId":"uuid","reason":"chain confirmation"}`。
 | POST `/api/economy/inventory/synthesize` | Body：`{"opId":"synth-01","characterId":10,"recipeId":"iron-sword","batchCount":1}` | `{"ok":true,"data":{"snapshot":{...EconomySnapshot}}}` |
 | POST `/api/economy/inventory/bag/expand` | Body：`{"opId":"bag-expand-01","characterId":10}` | `{"ok":true,"data":{"order":{...PaymentOrder,"purpose":"BAG_EXPAND"},"bagExpandCount":0,"bagSlots":25}}` |
 | POST `/api/economy/license/purchase` | Body：`{"opId":"license-01","characterId":10}` | `{"ok":true,"data":{"order":{...PaymentOrder,"purpose":"TRADING_LICENSE"},"hasLicense":false}}` |
+| POST `/api/economy/license/buy` | Body：`{"opId":"license-buy-01","characterId":10}` | 同 `/api/economy/license/purchase` |
 | GET `/api/economy/marketplace/listings` | Query：`status=LISTED&assetType=ITEM&itemId=iron_ore&limit=20&offset=0` | `{"ok":true,"data":{"items":[{"id":7001,"sellerAccountId":2,"sellerCharacterId":20,"assetType":"ITEM","assetId":1101,"itemId":"iron_ore","quantity":5,"priceToken":100,"listingDepositToken":1,"feeBps":500,"status":"LISTED","createdAt":"2026-07-14T10:00:00Z","updatedAt":"2026-07-14T10:00:00Z"}],"limit":20,"offset":0}}` |
 | GET `/api/economy/marketplace/listings/mine` | Header：`X-Account-Id: 1`；Query：`status=LISTED&limit=50&offset=0` | `{"ok":true,"data":{"items":[{"id":7001,"sellerAccountId":1,"sellerCharacterId":10,"assetType":"ITEM","assetId":1101,"itemId":"iron_ore","quantity":5,"priceToken":100,"listingDepositToken":1,"feeBps":500,"status":"LISTED","createdAt":"2026-07-14T10:00:00Z","updatedAt":"2026-07-14T10:00:00Z"}],"limit":50,"offset":0}}` |
 | GET `/api/economy/marketplace/slots` | Header：`X-Account-Id: 1` | `{"ok":true,"data":{"accountId":1,"baseSlots":5,"materialExpandCount":0,"walletExpandCount":0,"capacity":5,"used":1,"available":4}}` |

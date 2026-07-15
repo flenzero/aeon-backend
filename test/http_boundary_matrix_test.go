@@ -67,7 +67,7 @@ func TestEveryJSONWriteRouteRejectsOversizedBody(t *testing.T) {
 			})
 		}
 	}
-	if count != 78 {
+	if count != 87 {
 		t.Fatalf("oversized body manifest covered only %d write routes", count)
 	}
 }

@@ -94,6 +94,25 @@ Enforced by marketplace list/buy (`BUY` / `SELL` / `ALL`).
 | `GET` | `/api/admin/audits` |
 | `GET` | `/api/admin/ledger?accountId=` |
 
+## Announcements
+
+Rare reward announcements are generated only by trusted reward settlement
+paths. Admins can update the format templates and revoke generated rows, but
+cannot manually create rare reward announcements.
+
+| Method | Path |
+| --- | --- |
+| `GET` | `/api/admin/announcements?kind=&status=&limit=&offset=` |
+| `GET` | `/api/admin/announcements/templates?kind=` |
+| `PUT` | `/api/admin/announcements/templates/{code}` — `{ titleTemplate, bodyTemplate, displayMode, priority, durationSeconds, enabled?, reason }` |
+| `POST` | `/api/admin/announcements/notices` — `{ title, body, displayMode?, priority?, startsAt?, endsAt?, reason }` |
+| `PUT` | `/api/admin/announcements/notices/{announcementId}` — replaces an ops notice |
+| `POST` | `/api/admin/announcements/{announcementId}/revoke` — `{ reason }` |
+
+Default rare templates are `rare_equipment` and `rare_mount`; supported
+placeholders are `{characterName}`, `{source}`, `{itemName}`, `{itemId}`,
+`{rarity}`, and `{equipmentUid}`.
+
 ## Withdrawals / payments / NFT
 
 | Method | Path |
@@ -135,7 +154,7 @@ original result rather than performing the write again.
 | `GET` | `/api/admin/ops/payments/economy-orders/{orderId}/trace` |
 | `POST` | `/api/admin/ops/payments/economy-orders/{orderId}/recover` |
 
-奖励使用 Aeonblight 的 Gold 和 AEB 余额类别：`gold`、`withdrawableAeb`、`lockedAeb`、`items`。物品和装备始终进入 Loot Tray；发放、经济账本、审计和幂等结果是同一 PostgreSQL 事务。
+奖励使用 Aeonblight 的 Gold 和 AEB 余额类别：`gold`、`withdrawableAeb`、`lockedAeb`、`items`。`items[]` 支持 `itemId`、`quantity`，装备还可带 `rarity` 指定星级。物品和装备始终进入 Loot Tray；发放、经济账本、审计和幂等结果是同一 PostgreSQL 事务。直接发奖默认不生成稀有奖励公告；如果请求带 `announceRare:true`，则必须同时提供 `announcementSource`，用于公告中的奖励途径。
 
 补偿先以联合筛选条件创建 30 分钟有效的 Preview，再以该 `previewId` 提交。实际执行在一笔事务内按 250 名角色分批；其中任意角色无法发放时全部回滚。Payment Recovery 只处理已有链上收据的 `SUBMITTED`/`CONFIRMED` 订单，不能伪造交易签名，也不会重放已完成订单。
 

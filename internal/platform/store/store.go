@@ -237,17 +237,59 @@ type WalletLoginNonce struct {
 }
 
 type Character struct {
-	ID        int64     `json:"id"`
-	AccountID int64     `json:"accountId"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"createdAt"`
-	Deleted   bool      `json:"deleted"`
+	ID             int64           `json:"id"`
+	AccountID      int64           `json:"accountId"`
+	Name           string          `json:"name"`
+	SlotIndex      int             `json:"slotIndex"`
+	Level          int             `json:"level"`
+	Appearance     map[string]any  `json:"appearance"`
+	EquipmentItems []EquipmentItem `json:"equipmentItems,omitempty"`
+	CreatedAt      time.Time       `json:"createdAt"`
+	LastPlayed     time.Time       `json:"lastPlayed"`
+	HasLastPlayed  bool            `json:"hasLastPlayed"`
+	Deleted        bool            `json:"deleted"`
+}
+
+type PlayerState struct {
+	AccountID     int64          `json:"accountId"`
+	CharacterID   int64          `json:"characterId"`
+	PosX          float64        `json:"posX"`
+	PosY          float64        `json:"posY"`
+	CurrentMap    string         `json:"currentMap"`
+	PlayTimeSec   int64          `json:"playTimeSec"`
+	Hunger        float64        `json:"hunger"`
+	Level         int            `json:"level"`
+	Exp           int64          `json:"exp"`
+	Appearance    map[string]any `json:"appearanceJson"`
+	CharacterName string         `json:"characterName"`
+	LastPlayed    time.Time      `json:"lastPlayed"`
+	HasLastPlayed bool           `json:"hasLastPlayed"`
+}
+
+type PlayerSaveRequest struct {
+	AccountID   int64
+	CharacterID int64
+	PosX        float64
+	PosY        float64
+	CurrentMap  string
+	PlayTimeSec int64
+	Hunger      float64
+}
+
+type characterStateRecord struct {
+	PosX          float64
+	PosY          float64
+	CurrentMap    string
+	PlayTimeSec   int64
+	Hunger        float64
+	LastPlayed    time.Time
+	HasLastPlayed bool
 }
 
 type GameTicket struct {
 	Ticket      string    `json:"ticket"`
 	AccountID   int64     `json:"accountId"`
-	CharacterID int64     `json:"characterId"`
+	CharacterID int64     `json:"characterId,omitempty"`
 	ServerID    string    `json:"serverId"`
 	SessionID   string    `json:"sessionId"`
 	ExpiresAt   time.Time `json:"expiresAt"`
@@ -279,6 +321,79 @@ type EconomySnapshot struct {
 	Warehouse      []InventoryItem `json:"warehouse"`
 	LootTray       []InventoryItem `json:"lootTray"`
 	Equipment      []EquipmentItem `json:"equipmentItems"`
+}
+
+type ShopBuyRequest struct {
+	OpID           string
+	AccountID      int64
+	CharacterID    int64
+	ShopID         string
+	ItemID         string
+	Quantity       int64
+	GoldCost       int64
+	TokenCost      int64
+	ReceiverWallet string
+	GrantGold      int64
+	RewardPlan     DungeonRewardPlan
+	ConfigSnapshot any
+}
+
+type ShopBuyResult struct {
+	Order    PaymentOrder    `json:"order,omitempty"`
+	Snapshot EconomySnapshot `json:"snapshot,omitempty"`
+}
+
+type ShopSellRequest struct {
+	OpID         string
+	AccountID    int64
+	CharacterID  int64
+	ShopID       string
+	SlotIndex    int
+	Quantity     int64
+	EquipmentUID string
+	GoldCredit   int64
+}
+
+type ShopSellResult struct {
+	Snapshot EconomySnapshot `json:"snapshot"`
+}
+
+type ClearProgressLeaderboard struct {
+	Intro     string                         `json:"intro"`
+	Items     []ClearProgressLeaderboardItem `json:"items"`
+	UpdatedAt time.Time                      `json:"updatedAt"`
+}
+
+type ClearProgressLeaderboardItem struct {
+	Rank             int        `json:"rank"`
+	CharacterID      int64      `json:"characterId"`
+	CharacterName    string     `json:"characterName"`
+	HighestChapterID int        `json:"highestChapterId"`
+	HighestFloorID   int        `json:"highestFloorId"`
+	FirstReachedAt   *time.Time `json:"firstReachedAt"`
+	ClearCount       int64      `json:"clearCount"`
+}
+
+type WeeklyScoreLeaderboard struct {
+	Intro     string                       `json:"intro"`
+	Period    LeaderboardPeriod            `json:"period"`
+	Items     []WeeklyScoreLeaderboardItem `json:"items"`
+	UpdatedAt time.Time                    `json:"updatedAt"`
+}
+
+type LeaderboardPeriod struct {
+	PeriodID string    `json:"periodId"`
+	StartsAt time.Time `json:"startsAt"`
+	EndsAt   time.Time `json:"endsAt"`
+}
+
+type WeeklyScoreLeaderboardItem struct {
+	Rank          int        `json:"rank"`
+	CharacterID   int64      `json:"characterId"`
+	CharacterName string     `json:"characterName"`
+	Score         int64      `json:"score"`
+	ClearCount    int64      `json:"clearCount"`
+	LastScoredAt  *time.Time `json:"lastScoredAt"`
 }
 
 type InventoryItem struct {
@@ -357,28 +472,31 @@ type AuditEntry struct {
 }
 
 type Store struct {
-	mu                sync.Mutex
-	nextID            int64
-	nonces            map[string]*WalletLoginNonce
-	accounts          map[int64]*Account
-	byWallet          map[string]int64
-	characters        map[int64]*Character
-	tickets           map[string]*GameTicket
-	tokens            map[int64]*AccountToken
-	locked            map[int64]*LockedGame
-	withdrawals       map[int64]*Withdrawal
-	ledger            []LedgerEntry
-	audits            []AuditEntry
-	adminUsers        map[string]*AdminUser
-	adminLoginNonces  map[string]*AdminLoginNonce
-	adminOperations   map[string]*AdminOperation
-	sessions          map[string]*AccountSession
-	refresh           map[string]*RefreshTokenRecord
-	servers           map[string]*GameServer
-	online            map[int64]*OnlineSession
-	serviceIdentities map[string]*ServiceIdentity
-	serviceNonces     map[string]time.Time
-	dungeonRecoveries map[int64]*DungeonRunRecovery
+	mu                    sync.Mutex
+	nextID                int64
+	nonces                map[string]*WalletLoginNonce
+	accounts              map[int64]*Account
+	byWallet              map[string]int64
+	characters            map[int64]*Character
+	characterStates       map[int64]*characterStateRecord
+	tickets               map[string]*GameTicket
+	tokens                map[int64]*AccountToken
+	locked                map[int64]*LockedGame
+	withdrawals           map[int64]*Withdrawal
+	ledger                []LedgerEntry
+	audits                []AuditEntry
+	adminUsers            map[string]*AdminUser
+	adminLoginNonces      map[string]*AdminLoginNonce
+	adminOperations       map[string]*AdminOperation
+	announcementTemplates map[string]*AnnouncementTemplate
+	announcements         map[int64]*Announcement
+	sessions              map[string]*AccountSession
+	refresh               map[string]*RefreshTokenRecord
+	servers               map[string]*GameServer
+	online                map[int64]*OnlineSession
+	serviceIdentities     map[string]*ServiceIdentity
+	serviceNonces         map[string]time.Time
+	dungeonRecoveries     map[int64]*DungeonRunRecovery
 }
 
 var Default = New()
@@ -390,6 +508,7 @@ func New() *Store {
 		accounts:          map[int64]*Account{},
 		byWallet:          map[string]int64{},
 		characters:        map[int64]*Character{},
+		characterStates:   map[int64]*characterStateRecord{},
 		tickets:           map[string]*GameTicket{},
 		tokens:            map[int64]*AccountToken{},
 		locked:            map[int64]*LockedGame{},
@@ -894,6 +1013,9 @@ func (s *Store) SaveAdminOperation(in AdminOperation) (AdminOperation, error) {
 }
 
 func (s *Store) AdminGrantRewards(req AdminRewardGrant) (AdminRewardGrantResult, error) {
+	if req.AnnounceRare && strings.TrimSpace(req.AnnouncementSource) == "" {
+		return AdminRewardGrantResult{}, errors.New("announcementSource is required when announceRare is true")
+	}
 	return AdminRewardGrantResult{}, adminErrRequiresPostgres("admin reward grant")
 }
 
@@ -969,14 +1091,38 @@ func (s *Store) AdminRevokeAccountSessions(accountID int64) (int64, error) {
 }
 
 func (s *Store) CreateCharacter(accountID int64, name string) (Character, error) {
+	return s.CreateCharacterWithAppearance(accountID, name, nil)
+}
+
+func (s *Store) CreateCharacterWithAppearance(accountID int64, name string, appearance map[string]any) (Character, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, ok := s.accounts[accountID]; !ok {
 		return Character{}, ErrNotFound
 	}
+	used := map[int]bool{}
+	for _, row := range s.characters {
+		if row.AccountID == accountID && !row.Deleted {
+			used[row.SlotIndex] = true
+		}
+	}
+	slotIndex := -1
+	for candidate := 0; candidate < 3; candidate++ {
+		if !used[candidate] {
+			slotIndex = candidate
+			break
+		}
+	}
+	if slotIndex < 0 {
+		return Character{}, errors.New("character slots are full")
+	}
 	id := s.next()
-	row := &Character{ID: id, AccountID: accountID, Name: name, CreatedAt: time.Now().UTC()}
+	if appearance == nil {
+		appearance = map[string]any{}
+	}
+	row := &Character{ID: id, AccountID: accountID, Name: name, SlotIndex: slotIndex, Level: 1, Appearance: appearance, EquipmentItems: []EquipmentItem{}, CreatedAt: time.Now().UTC(), LastPlayed: time.Unix(0, 0).UTC()}
 	s.characters[id] = row
+	s.characterStates[id] = &characterStateRecord{Hunger: 100, LastPlayed: time.Unix(0, 0).UTC()}
 	return *row, nil
 }
 
@@ -986,7 +1132,12 @@ func (s *Store) Characters(accountID int64) []Character {
 	rows := []Character{}
 	for _, row := range s.characters {
 		if row.AccountID == accountID && !row.Deleted {
-			rows = append(rows, *row)
+			copy := *row
+			if state, ok := s.characterStates[row.ID]; ok {
+				copy.LastPlayed = state.LastPlayed
+				copy.HasLastPlayed = state.HasLastPlayed
+			}
+			rows = append(rows, copy)
 		}
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
@@ -1000,7 +1151,82 @@ func (s *Store) Character(accountID, characterID int64) (Character, bool) {
 	if !ok || row.AccountID != accountID || row.Deleted {
 		return Character{}, false
 	}
-	return *row, true
+	copy := *row
+	if state, ok := s.characterStates[characterID]; ok {
+		copy.LastPlayed = state.LastPlayed
+		copy.HasLastPlayed = state.HasLastPlayed
+	}
+	return copy, true
+}
+
+func (s *Store) DeleteCharacter(accountID, characterID int64) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	row, ok := s.characters[characterID]
+	if !ok || row.AccountID != accountID || row.Deleted {
+		return ErrNotFound
+	}
+	row.Deleted = true
+	delete(s.characterStates, characterID)
+	return nil
+}
+
+func (s *Store) PlayerProfile(accountID, characterID int64) (PlayerState, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	row, ok := s.characters[characterID]
+	if !ok || row.AccountID != accountID || row.Deleted {
+		return PlayerState{}, ErrNotFound
+	}
+	state := s.characterStates[characterID]
+	if state == nil {
+		state = &characterStateRecord{Hunger: 100, LastPlayed: time.Unix(0, 0).UTC()}
+		s.characterStates[characterID] = state
+	}
+	return PlayerState{
+		AccountID: accountID, CharacterID: characterID, PosX: state.PosX, PosY: state.PosY,
+		CurrentMap: state.CurrentMap, PlayTimeSec: state.PlayTimeSec, Hunger: state.Hunger,
+		Level: row.Level, Appearance: row.Appearance, CharacterName: row.Name,
+		LastPlayed: state.LastPlayed, HasLastPlayed: state.HasLastPlayed,
+	}, nil
+}
+
+func (s *Store) SavePlayerState(req PlayerSaveRequest) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	row, ok := s.characters[req.CharacterID]
+	if !ok || row.AccountID != req.AccountID || row.Deleted {
+		return ErrNotFound
+	}
+	if req.PlayTimeSec < 0 {
+		return errors.New("playTimeSec must be non-negative")
+	}
+	if req.Hunger < 0 {
+		return errors.New("hunger must be non-negative")
+	}
+	now := time.Now().UTC()
+	s.characterStates[req.CharacterID] = &characterStateRecord{
+		PosX:          req.PosX,
+		PosY:          req.PosY,
+		CurrentMap:    strings.TrimSpace(req.CurrentMap),
+		PlayTimeSec:   req.PlayTimeSec,
+		Hunger:        req.Hunger,
+		LastPlayed:    now,
+		HasLastPlayed: true,
+	}
+	return nil
+}
+
+func (s *Store) ClearProgressLeaderboard(limit int) (ClearProgressLeaderboard, error) {
+	return ClearProgressLeaderboard{Intro: "永久通关进度榜按角色历史最高 floorId 排名，同层时更早达成者优先。", Items: []ClearProgressLeaderboardItem{}, UpdatedAt: time.Now().UTC()}, nil
+}
+
+func (s *Store) WeeklyScoreLeaderboard(now time.Time, limit int) (WeeklyScoreLeaderboard, error) {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	period := LeaderboardPeriod{PeriodID: "weekly-score-20260701-0", StartsAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC), EndsAt: time.Date(2026, 7, 8, 0, 0, 0, 0, time.UTC)}
+	return WeeklyScoreLeaderboard{Intro: "7 天游积分榜每次成功通关按 floorId 加分，同一楼层可重复累计。", Period: period, Items: []WeeklyScoreLeaderboardItem{}, UpdatedAt: now.UTC()}, nil
 }
 
 func (s *Store) EconomySnapshot(accountID, characterID int64) (EconomySnapshot, error) {
@@ -1022,6 +1248,26 @@ func (s *Store) EconomySnapshot(accountID, characterID int64) (EconomySnapshot, 
 		LootTray:     []InventoryItem{},
 		Equipment:    []EquipmentItem{},
 	}, nil
+}
+
+func (s *Store) ShopBuyGold(req ShopBuyRequest) (ShopBuyResult, error) {
+	snapshot, err := s.EconomySnapshot(req.AccountID, req.CharacterID)
+	if err != nil {
+		return ShopBuyResult{}, err
+	}
+	return ShopBuyResult{Snapshot: snapshot}, nil
+}
+
+func (s *Store) CreateShopBuyPayment(req ShopBuyRequest) (ShopBuyResult, error) {
+	return ShopBuyResult{}, errors.New("shop chain payment requires postgres store")
+}
+
+func (s *Store) ShopSell(req ShopSellRequest) (ShopSellResult, error) {
+	snapshot, err := s.EconomySnapshot(req.AccountID, req.CharacterID)
+	if err != nil {
+		return ShopSellResult{}, err
+	}
+	return ShopSellResult{Snapshot: snapshot}, nil
 }
 
 func (s *Store) WarehouseDeposit(req EconomyActionRequest) (EconomySnapshot, error) {
@@ -1099,7 +1345,7 @@ func (s *Store) CancelDungeonRun(accountID, characterID int64, dungeonRunID, rea
 	row.Required = false
 	row.Status = "CANCELLED"
 	for _, ticket := range s.tickets {
-		if ticket.AccountID == accountID && ticket.CharacterID == characterID && !ticket.Consumed {
+		if ticket.AccountID == accountID && (ticket.CharacterID == characterID || (ticket.CharacterID == 0 && ticket.ServerID == row.ServerID)) && !ticket.Consumed {
 			ticket.Consumed = true
 		}
 	}
@@ -1435,6 +1681,10 @@ func (s *Store) SaveTicket(ticket GameTicket) {
 func (s *Store) ConsumeTicket(ticket, serverID string, now time.Time) (GameTicket, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	serverID = strings.TrimSpace(serverID)
+	if serverID == "" {
+		return GameTicket{}, ErrForbidden
+	}
 	row, ok := s.tickets[ticket]
 	if !ok {
 		return GameTicket{}, ErrNotFound
@@ -1442,7 +1692,11 @@ func (s *Store) ConsumeTicket(ticket, serverID string, now time.Time) (GameTicke
 	if row.Consumed || row.ExpiresAt.Before(now) {
 		return GameTicket{}, ErrForbidden
 	}
-	if row.ServerID != "" && serverID != "" && row.ServerID != serverID {
+	if row.ServerID == "" || row.ServerID != serverID {
+		return GameTicket{}, ErrForbidden
+	}
+	session, ok := s.sessions[row.SessionID]
+	if !ok || session.AccountID != row.AccountID || session.Status != "ACTIVE" {
 		return GameTicket{}, ErrForbidden
 	}
 	row.Consumed = true
@@ -1468,6 +1722,19 @@ func (s *Store) CreateAccountSession(req CreateSessionRequest) (AccountSession, 
 		ExpiresAt: req.ExpiresAt, CreatedAt: now,
 	}
 	return *row, nil
+}
+
+func (s *Store) CountMonthlyActiveAccounts(since time.Time) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	seen := map[int64]struct{}{}
+	for _, row := range s.sessions {
+		if row.LastSeenAt == nil || row.LastSeenAt.Before(since) {
+			continue
+		}
+		seen[row.AccountID] = struct{}{}
+	}
+	return len(seen), nil
 }
 
 func (s *Store) GetAccountSession(sessionID string) (AccountSession, error) {
@@ -1544,6 +1811,15 @@ func (s *Store) UpsertGameServer(server GameServer) (GameServer, error) {
 		s.servers = map[string]*GameServer{}
 	}
 	now := time.Now().UTC()
+	if server.MaxPlayers <= 0 {
+		server.MaxPlayers = 50
+	}
+	if strings.TrimSpace(server.Status) == "" {
+		server.Status = "ONLINE"
+	}
+	if strings.TrimSpace(server.DisplayName) == "" {
+		server.DisplayName = server.ServerID
+	}
 	if existing, ok := s.servers[server.ServerID]; ok {
 		existing.DisplayName = server.DisplayName
 		existing.Region = server.Region
@@ -1554,12 +1830,6 @@ func (s *Store) UpsertGameServer(server GameServer) (GameServer, error) {
 		existing.Status = server.Status
 		existing.LastHeartbeatAt = &now
 		return *existing, nil
-	}
-	if server.MaxPlayers <= 0 {
-		server.MaxPlayers = 50
-	}
-	if server.Status == "" {
-		server.Status = "ONLINE"
 	}
 	server.RegisteredAt = now
 	server.LastHeartbeatAt = &now

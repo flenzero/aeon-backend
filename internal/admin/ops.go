@@ -52,7 +52,7 @@ func serverView(server store.GameServer, now time.Time) opsServerView {
 	live := server.LastHeartbeatAt != nil && !server.LastHeartbeatAt.Before(now.Add(-serverHeartbeatWindow))
 	publicStatus := "offline"
 	if server.Status == "ONLINE" && live {
-		if server.OnlinePlayers >= server.MaxPlayers {
+		if server.MaxPlayers > 0 && server.OnlinePlayers >= opsServerFullThreshold(server.MaxPlayers) {
 			publicStatus = "full"
 		} else {
 			publicStatus = "online"
@@ -64,6 +64,13 @@ func serverView(server store.GameServer, now time.Time) opsServerView {
 		HasSlot: publicStatus == "online", Status: strings.ToLower(server.Status), PublicStatus: publicStatus,
 		Live: live, Region: server.Region, PublicEndpoint: server.PublicEndpoint, LastPing: server.LastHeartbeatAt,
 	}
+}
+
+func opsServerFullThreshold(maxPlayers int) int {
+	if maxPlayers <= 0 {
+		return 0
+	}
+	return (maxPlayers*95 + 99) / 100
 }
 
 func (h *Handler) findServer(serverID string) (store.GameServer, error) {

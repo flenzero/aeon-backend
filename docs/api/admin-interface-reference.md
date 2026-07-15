@@ -476,7 +476,92 @@ Kind 与 Capability 白名单：
 - 重复撤销幂等，不覆盖首次撤销人、原因和时间。
 - 成功：更新后的 ServiceIdentity。
 
-## 11. Super Admin Ops
+## 11. 公告管理
+
+公告分为两类：
+
+- `OPS_NOTICE`：活动开启/关闭、维护、版本更新等运营通知。管理员可以创建、修改和撤销。
+- `RARE_REWARD`：超稀有装备、坐骑等炫耀公告。只能由真实发奖事务自动生成，管理员不能手工创建，但可以修改模板和撤销已生成公告。
+
+### GET `/api/admin/announcements`
+
+- 权限：管理员可读。
+- Query：
+  - `kind?`：`OPS_NOTICE` 或 `RARE_REWARD`；
+  - `status?`：`ACTIVE` 或 `REVOKED`；
+  - `limit?`：1–200，默认 50；
+  - `offset?`：非负整数。
+- 成功：`items: Announcement[]`、`count`、`limit`、`offset`。
+
+`Announcement` 字段：`id`、`kind`、`status`、`displayMode`、`title`、`body`、`priority`、`scope`、`metadata?`、`startsAt`、`endsAt?`、`createdAt`、`createdBy?`、`revokedAt?`、`revokedBy?`、`revokeReason?`。
+
+### GET `/api/admin/announcements/templates`
+
+- 权限：管理员可读。
+- Query：`kind?`。
+- 默认模板：`rare_equipment`、`rare_mount`、`ops_notice`。
+- 模板用于控制自动稀有公告和默认运营通知的标题、正文、展示方式、优先级和持续时间。
+
+### PUT `/api/admin/announcements/templates/{code}`
+
+```json
+{
+  "titleTemplate":"{characterName} 获得了 {rarity} 星装备",
+  "bodyTemplate":"通过 {source} 获得 {itemName}",
+  "displayMode":"POPUP",
+  "priority":900,
+  "durationSeconds":300,
+  "enabled":true,
+  "reason":"tighten rare equipment copy"
+}
+```
+
+- 权限：管理员可写。
+- `code` 必须是现有模板编码；当前支持 `rare_equipment`、`rare_mount`、`ops_notice`。
+- `displayMode`：`POPUP` 或 `BANNER`；稀有奖励公告通常使用 `POPUP`。
+- 自动稀有公告模板可使用占位符：`{characterName}`、`{itemName}`、`{rarity}`、`{source}`、`{quantity}`。
+- 成功返回更新后的 `template`，并写入管理员审计。
+
+### POST `/api/admin/announcements/notices`
+
+```json
+{
+  "title":"限时活动开启",
+  "body":"世界 Boss 活动将于 20:00 开启",
+  "displayMode":"BANNER",
+  "priority":700,
+  "startsAt":"2026-07-15T12:00:00Z",
+  "endsAt":"2026-07-15T16:00:00Z",
+  "reason":"publish event notice"
+}
+```
+
+- 权限：管理员可写。
+- 创建 `OPS_NOTICE`。不传 `startsAt` 时立即生效；不传 `endsAt` 时一直有效，直到管理员撤销。
+- 成功 HTTP `201`，返回 `announcement` 并写入审计。
+- 当前生效的运营通知会出现在公开 `GET /api/announcements/active`，也会出现在游戏服 `GET /api/economy/announcements/active`。
+
+### PUT `/api/admin/announcements/notices/{announcementId}`
+
+- 权限：管理员可写。
+- Body 与创建接口相同。
+- 只能修改 `OPS_NOTICE`；`RARE_REWARD` 不能通过该接口改写内容。
+- 成功返回更新后的 `announcement` 并写入审计。
+
+### POST `/api/admin/announcements/{announcementId}/revoke`
+
+```json
+{
+  "reason":"notice expired early"
+}
+```
+
+- 权限：管理员可写。
+- 可撤销任意公告，包括自动生成的 `RARE_REWARD`。
+- 撤销是软删除：公告状态变为 `REVOKED`，不会再出现在 active 公告流。
+- 成功返回撤销后的 `announcement` 并写入审计。
+
+## 12. Super Admin Ops
 
 本节所有接口均要求 `X-Super-Admin-Key: <SUPER_ADMIN_OPS_KEY>`。所有写接口（包括 dry run/preview）都要求非空 `opId` 和 `reason`：dry run 不改变玩家资产，但仍会保存预览、管理员审计和可回放的操作结果。`opId` 是全局幂等键，一旦接受即绑定当前超级管理员和操作类型；重试返回首次成功响应，不会重复创建预览或重复发奖。
 
@@ -520,7 +605,7 @@ Kind 与 Capability 白名单：
 
 状态更新和踢人分别使用 `{ "opId", "reason", "status" }` 与 `{ "opId", "reason", "revokeSession" }`。踢人只清除本系统的在线态；`revokeSession=true` 时还会撤销当前 Session。它不会向游戏服发送远程断线命令，下一次鉴权、重连或心跳会体现 Session 状态。
 
-### 11.1 单角色奖励
+### 12.1 单角色奖励
 
 #### POST `/api/admin/ops/characters/{characterId}/grants/rewards`
 
@@ -532,17 +617,21 @@ Kind 与 Capability 白名单：
   "withdrawableAeb":500,
   "lockedAeb":100,
   "items":[
-    {"itemId":"wood","quantity":10}
-  ]
+    {"itemId":"wood","quantity":10},
+    {"itemId":"aeonblight_sword_t30","quantity":1,"rarity":5}
+  ],
+  "announceRare":true,
+  "announcementSource":"活动奖励"
 }
 ```
 
 - `characterId`、`opId`、`reason` 必填；至少提供一项正奖励，金额不得为负。
-- `itemId` 必须存在于当前 Economy 配置；普通物品数量必须为正，装备数量只能为 `1`。
+- `itemId` 必须存在于当前 Economy 配置；普通物品数量必须为正，装备数量只能为 `1`；装备可额外传 `rarity` 指定星级。
 - Gold 写入角色钱包；AEB 写入所属账号的可提现或锁定余额；物品与装备进入 Loot Tray，不占用背包格。
-- 成功返回 `snapshot`（角色及账号经济快照）和 `items`（本次写入 Loot Tray 的物品、装备）。Gold、AEB、Loot Tray、`economy_ledger`、审计和幂等结果在同一数据库事务中完成。
+- 直接发奖默认不生成稀有奖励公告；如果 `announceRare=true`，必须同时提供 `announcementSource`，用于公告中的奖励途径。
+- 成功返回 `snapshot`（角色及账号经济快照）、`items`（本次写入 Loot Tray 的物品、装备）和 `announcements`（若本次生成稀有公告）。Gold、AEB、Loot Tray、稀有公告、`economy_ledger`、审计和幂等结果在同一数据库事务中完成。
 
-### 11.2 管理员抽奖：Dry Run → Preview → Commit
+### 12.2 管理员抽奖：Dry Run → Preview → Commit
 
 #### POST `/api/admin/ops/characters/{characterId}/lottery/draw`
 
@@ -558,7 +647,7 @@ Kind 与 Capability 白名单：
 - `count` 必须在当前 Economy 配置的 `1..lottery.maxCount` 区间内。
 - `dryRun` 必须为 `true`；传 `false` 会被拒绝，不能通过该接口直接发奖。
 - 成功返回 `dryRun`、`preview` 和 `audit`。`preview` 包含 `previewId`、`characterId`、`rewards` 和 `expiresAt`；奖励计划已落库并绑定当前超级管理员和角色，有效期 30 分钟。
-- 本管理员抽奖为免费运营发奖：不扣 AEB，也不创建支付订单。
+- 本管理员抽奖为免费运营发奖：不扣 AEB，也不创建支付订单；dry run 只生成预览，不生成公告。
 
 #### POST `/api/admin/ops/characters/{characterId}/lottery/commit-preview`
 
@@ -572,9 +661,10 @@ Kind 与 Capability 白名单：
 
 - `previewId` 必须尚未过期、仍为 `PENDING`，且属于当前超级管理员及 URL 中的 `characterId`。
 - 只会发放 preview 中保存的 `rewards`，不会重新随机；成功后预览变为 `COMMITTED`。
-- 成功返回与单角色奖励相同的 `snapshot`、`items`。若提交因任何业务或数据库错误失败，事务会回滚，预览仍可在有效期内重试。
+- 如果 preview 中包含超稀有装备或坐骑，提交发放成功后会自动生成 `RARE_REWARD` 公告，公告途径为 `管理员代抽`。
+- 成功返回与单角色奖励相同的 `snapshot`、`items` 和 `announcements`。若提交因任何业务或数据库错误失败，事务会回滚，预览仍可在有效期内重试。
 
-### 11.3 批量全服补偿
+### 12.3 批量全服补偿
 
 #### POST `/api/admin/ops/compensation/preview`
 
@@ -642,7 +732,7 @@ Query：`limit?`、`offset?`、`keyword?`；`limit` 默认 50，范围 1-200。
 - 系统按每 250 名角色一个内部批次执行，但全量补偿仍处于一个数据库事务；任何角色发奖失败都会回滚所有目标，预览保持可在有效期内重试。
 - 成功返回 `previewId` 和完整 `processed` 数量，并将预览设为 `COMMITTED`。
 
-### 11.4 支付订单追踪与补发
+### 12.4 支付订单追踪与补发
 
 #### GET `/api/admin/ops/payments/economy-orders/{orderId}/trace`
 
@@ -665,7 +755,7 @@ Query：`limit?`、`offset?`、`keyword?`；`limit` 默认 50，范围 1-200。
 - 成功返回 `order` 和 `audit`；`opId` 重试返回首次成功结果，不会重复履约。
 
 
-## 12. 通用状态码
+## 13. 通用状态码
 
 | HTTP | code | 说明 |
 | ---: | ---: | --- |
@@ -676,7 +766,7 @@ Query：`limit?`、`offset?`、`keyword?`；`limit` 默认 50，范围 1-200。
 | 404 | 404 | 目标不存在 |
 | 503 | 4002 | 生产 NFT Core 适配器未配置 |
 
-## 13. 调用示例
+## 14. 调用示例
 
 ```bash
 curl -sS \

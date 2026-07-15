@@ -66,9 +66,9 @@ cmd/economy-worker
 The WebGL client should keep a minimal trust surface:
 
 ```text
-WebGL client -> account-api -> launch ticket
+WebGL client -> account-api -> public server list / launch ticket
 WebGL client -> game-server -> gameplay
-game-server -> account-api -> consume ticket / validate player
+game-server -> account-api -> consume ticket / validate account / online enter after character selection
 game-server -> economy-api -> settlement / snapshot / withdrawal requests
 ```
 
@@ -95,11 +95,12 @@ result JSON. It loads `configs/economy` through `ECONOMY_CONFIG_DIR` to enforce
 configured exp caps and generate durable rewards. Items and equipment enter the
 loot tray; token rewards enter locked AEB records.
 
-Each Dungeon Run records its origin Game Server. On the home screen, the player
-must reconnect to that server or explicitly abandon the run. Reconnect issues a
-short-lived origin-bound Launch Ticket. Abandon changes the run to `CANCELLED`
-without invoking reward settlement. Normal launch to another server is blocked
-while the run remains `STARTED`.
+Each Dungeon Run records its origin Game Server. Home-page launch only creates
+an account-level ticket for the selected server. After the game client selects a
+Character, it checks recovery; a started run must reconnect to its origin server
+or be explicitly abandoned. Reconnect issues a short-lived origin-bound Launch
+Ticket. Abandon changes the run to `CANCELLED` without invoking reward
+settlement.
 Creating the run also requires the Account/Character Online Presence to match
 the signed calling Game Server. Both recovery decisions require an active,
 durably confirmed Session; Redis cache entries never override revocation.

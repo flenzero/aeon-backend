@@ -11,6 +11,7 @@ ECONOMY_CONFIG_DIR=configs/economy
 Files:
 
 - `items.json`: canonical item and equipment catalog IDs.
+- `shops.json`: shop definitions and item availability lists.
 - `economy_rules.json`: shared caps, bag/warehouse sizes, bag expand, trading license, equipment repair, NFT mint fees.
 - `marketplace.json`: marketplace fees, slot expands, daily limits.
 - `dungeons.json`: chapter/floor entry costs, exp caps, reward pools, and combat scale passthrough.
@@ -22,6 +23,21 @@ Files:
 - `bosses.json`: global boss reward pools and contribution tiers.
 - `recipes.json`: inventory synthesis recipes for materials and equipment.
 - `lottery.json` / `bounties.json`: paid lottery and bounty-board rules.
+
+## Shops
+
+`shops.json` is intentionally empty by default. A shop becomes usable only when
+it contains a `shopId` and either `sellAllItems=true` or the requested `itemId`
+is present in `sellItems`.
+
+Prices live on `items.json` rows:
+
+- `buyCurrency`: `0` = gold, `1` = AEB chain payment order.
+- `buyPrice`: unit purchase price; runtime purchase rejects zero-priced rows.
+- `sellPrice`: unit gold credit when selling an inventory item or in-bag
+  equipment to a shop; runtime sale rejects zero-priced rows.
+- `grantGold`: optional gold granted after purchase instead of creating an
+  inventory/equipment item.
 
 ## Dungeons
 

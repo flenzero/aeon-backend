@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/flenzero/aeon-backend/internal/platform/redisx"
 	"github.com/flenzero/aeon-backend/internal/platform/security"
 	"github.com/flenzero/aeon-backend/internal/platform/store"
 )
@@ -76,7 +77,7 @@ func (s *Service) ResolveDungeonRecovery(accountID, characterID int64, dungeonRu
 		ticket := security.RandomToken("ticket")
 		expiresAt := time.Now().UTC().Add(90 * time.Second)
 		s.store.SaveTicket(store.GameTicket{
-			Ticket: ticket, AccountID: accountID, CharacterID: characterID,
+			Ticket: ticket, AccountID: accountID,
 			ServerID: row.ServerID, SessionID: strings.TrimSpace(sessionID), ExpiresAt: expiresAt,
 		})
 		return DungeonRecoveryDecision{
@@ -390,6 +391,62 @@ func (s *Service) GetOnline(accountID int64) (store.OnlineSession, error) {
 
 func (s *Service) ListOnline(serverID string) ([]store.OnlineSession, error) {
 	return s.store.ListOnlineByServer(strings.TrimSpace(serverID))
+}
+
+func (s *Service) onlinePresenceCounts(servers []store.GameServer, now time.Time) (map[string]int, error) {
+	counts := make(map[string]int, len(servers))
+	for _, server := range servers {
+		counts[server.ServerID] = 0
+	}
+	if s.redis == nil || !s.redis.Enabled() {
+		for _, server := range servers {
+			rows, err := s.store.ListOnlineByServer(server.ServerID)
+			if err != nil {
+				return nil, err
+			}
+			cutoff := now.Add(-s.onlineTTL())
+			for _, row := range rows {
+				if !row.LastSeenAt.Before(cutoff) {
+					counts[server.ServerID]++
+				}
+			}
+		}
+		return counts, nil
+	}
+	ctx := context.Background()
+	for _, server := range servers {
+		setKey := redisServerSetPref + server.ServerID
+		members, err := s.redis.SMembers(ctx, setKey)
+		if err != nil {
+			return nil, err
+		}
+		stale := make([]string, 0)
+		for _, member := range members {
+			accountID, err := strconv.ParseInt(member, 10, 64)
+			if err != nil || accountID <= 0 {
+				stale = append(stale, member)
+				continue
+			}
+			var cached store.OnlineSession
+			err = s.redis.GetJSON(ctx, redisOnlinePrefix+member, &cached)
+			if errors.Is(err, redisx.ErrNotFound) {
+				stale = append(stale, member)
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			if cached.AccountID != accountID || cached.ServerID != server.ServerID {
+				stale = append(stale, member)
+				continue
+			}
+			counts[server.ServerID]++
+		}
+		if len(stale) > 0 {
+			_ = s.redis.SRem(ctx, setKey, stale...)
+		}
+	}
+	return counts, nil
 }
 
 func (s *Service) SweepStaleOnline() (int64, error) {

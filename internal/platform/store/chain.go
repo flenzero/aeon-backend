@@ -1005,6 +1005,13 @@ func (s *PostgresStore) fulfillPaymentOrderTx(ctx context.Context, tx pgx.Tx, or
 		if err := s.fulfillLotteryPaymentTx(ctx, tx, order); err != nil {
 			return PaymentOrder{}, err
 		}
+	case PaymentPurposeShopBuy:
+		if order.CharacterID <= 0 {
+			return PaymentOrder{}, errors.New("shop buy order missing characterId")
+		}
+		if err := s.fulfillShopBuyPaymentTx(ctx, tx, order); err != nil {
+			return PaymentOrder{}, err
+		}
 	case PaymentPurposeBountySlotUnlock, PaymentPurposeBountyPremiumRefresh:
 		if err := s.fulfillBountyPaymentTx(ctx, tx, order); err != nil {
 			return PaymentOrder{}, err

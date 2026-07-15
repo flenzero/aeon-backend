@@ -17,6 +17,7 @@ import (
 type Config struct {
 	Dir         string
 	Items       map[string]Item
+	Shops       map[string]Shop
 	Floors      map[string]DungeonFloor
 	LootPools   map[string]LootPool
 	AffixPools  map[string]AffixPool
@@ -41,6 +42,17 @@ type Item struct {
 	EquipSlot       int    `json:"equipSlot"`
 	Tradable        bool   `json:"tradable"`
 	DefaultBindType string `json:"defaultBindType"`
+	BuyCurrency     int    `json:"buyCurrency"`
+	BuyPrice        int64  `json:"buyPrice"`
+	SellPrice       int64  `json:"sellPrice"`
+	GrantGold       int64  `json:"grantGold"`
+}
+
+type Shop struct {
+	ShopID       string   `json:"shopId"`
+	DisplayName  string   `json:"displayName"`
+	SellAllItems bool     `json:"sellAllItems"`
+	SellItems    []string `json:"sellItems"`
 }
 
 // EquipmentConfig defines the live, config-derived equipment model. Equipment
@@ -352,6 +364,7 @@ func LoadDir(dir string) (*Config, error) {
 	cfg := &Config{
 		Dir:         dir,
 		Items:       map[string]Item{},
+		Shops:       map[string]Shop{},
 		Floors:      map[string]DungeonFloor{},
 		LootPools:   map[string]LootPool{},
 		AffixPools:  map[string]AffixPool{},
@@ -367,6 +380,9 @@ func LoadDir(dir string) (*Config, error) {
 		return nil, err
 	}
 	if err := cfg.loadEquipment(); err != nil {
+		return nil, err
+	}
+	if err := cfg.loadShops(); err != nil {
 		return nil, err
 	}
 	if err := cfg.loadLottery(); err != nil {
@@ -718,6 +734,26 @@ func (c *Config) loadItems() error {
 	return nil
 }
 
+func (c *Config) loadShops() error {
+	var file struct {
+		Shops []Shop `json:"shops"`
+	}
+	if err := readJSON(filepath.Join(c.Dir, "shops.json"), &file); err != nil {
+		return err
+	}
+	for _, row := range file.Shops {
+		row.ShopID = strings.TrimSpace(row.ShopID)
+		if row.ShopID == "" {
+			return errors.New("shops.json contains empty shopId")
+		}
+		if _, exists := c.Shops[row.ShopID]; exists {
+			return fmt.Errorf("shops.json contains duplicate shopId %q", row.ShopID)
+		}
+		c.Shops[row.ShopID] = row
+	}
+	return nil
+}
+
 func (c *Config) loadRules() error {
 	return readJSON(filepath.Join(c.Dir, "economy_rules.json"), &c.Rules)
 }
@@ -784,6 +820,75 @@ func (c *Config) EquipmentTemplate(itemID string) (EquipmentTemplate, bool) {
 func (c *Config) EquipmentRarity(rarity int) (EquipmentRarity, bool) {
 	row, ok := c.Equipment.Rarities[rarity]
 	return row, ok
+}
+
+func (c *Config) Shop(shopID string) (Shop, bool) {
+	row, ok := c.Shops[strings.TrimSpace(shopID)]
+	return row, ok
+}
+
+func (shop Shop) SellsItem(itemID string) bool {
+	itemID = strings.TrimSpace(itemID)
+	if itemID == "" {
+		return false
+	}
+	if shop.SellAllItems {
+		return true
+	}
+	for _, candidate := range shop.SellItems {
+		if strings.TrimSpace(candidate) == itemID {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Config) ShopPurchasePlan(opID string, characterID int64, itemID string, quantity int64) (store.DungeonRewardPlan, error) {
+	item, ok := c.Items[strings.TrimSpace(itemID)]
+	if !ok {
+		return store.DungeonRewardPlan{}, fmt.Errorf("unknown item %q", itemID)
+	}
+	if quantity <= 0 {
+		return store.DungeonRewardPlan{}, errors.New("quantity must be positive")
+	}
+	if item.GrantGold > 0 {
+		return store.DungeonRewardPlan{}, nil
+	}
+	category := strings.TrimSpace(item.Category)
+	if category == "" {
+		category = "item"
+	}
+	if !item.IsEquipment {
+		return store.DungeonRewardPlan{Items: []store.DungeonRewardGrant{{
+			RewardType: "item",
+			ItemID:     item.ItemID,
+			Quantity:   quantity,
+			Rarity:     item.Rarity,
+			Category:   category,
+		}}}, nil
+	}
+	rarity := item.Rarity
+	if rarity <= 0 {
+		rarity = 1
+	}
+	plan := store.DungeonRewardPlan{Items: make([]store.DungeonRewardGrant, 0, quantity)}
+	for i := int64(0); i < quantity; i++ {
+		affixes := []store.EquipmentAffix{}
+		if _, ok := c.EquipmentTemplate(item.ItemID); ok {
+			rng := rand.New(rand.NewPCG(seed(opID, "shop", characterID, int(i), 0), 0x4cf5ad432745937f))
+			affixes = c.rollEquipmentAffixes(rng, item.ItemID, rarity)
+		}
+		plan.Items = append(plan.Items, store.DungeonRewardGrant{
+			RewardType:   "equipment",
+			ItemID:       item.ItemID,
+			Quantity:     1,
+			Rarity:       rarity,
+			Category:     category,
+			EquipmentUID: equipmentUID(c.Rules.EquipmentUIDPrefix, opID, "shop", int(i), 0),
+			Affixes:      affixes,
+		})
+	}
+	return plan, nil
 }
 
 func (c *Config) EnhancementRule(itemID string, rarity, nextLevel int) (gold int64, stoneItemID string, stoneQuantity int64, err error) {
@@ -1118,6 +1223,25 @@ type recipeOutputJSON struct {
 }
 
 func (c *Config) validate() error {
+	for itemID, item := range c.Items {
+		if item.BuyCurrency < 0 || item.BuyPrice < 0 || item.SellPrice < 0 || item.GrantGold < 0 {
+			return fmt.Errorf("item %q has invalid shop pricing fields", itemID)
+		}
+		if item.BuyCurrency > 1 {
+			return fmt.Errorf("item %q has unsupported buyCurrency %d", itemID, item.BuyCurrency)
+		}
+	}
+	for shopID, shop := range c.Shops {
+		for _, itemID := range shop.SellItems {
+			itemID = strings.TrimSpace(itemID)
+			if itemID == "" {
+				return fmt.Errorf("shop %q contains an empty sellItems entry", shopID)
+			}
+			if _, ok := c.Items[itemID]; !ok {
+				return fmt.Errorf("shop %q references unknown item %q", shopID, itemID)
+			}
+		}
+	}
 	if len(c.Equipment.StageMultipliers) != 7 || len(c.Equipment.Rarities) != 6 {
 		return errors.New("equipment_templates.json must define seven stages and six rarities")
 	}

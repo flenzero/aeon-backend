@@ -97,16 +97,26 @@ func TestSessionRefreshLogoutAndOnlineFlow(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	launch, err := service.Launch(login.Account.ID, char.ID, login.SessionID, server.ServerID)
+	launch, err := service.Launch(login.Account.ID, login.SessionID, server.ServerID)
 	if err != nil {
 		t.Fatalf("launch: %v", err)
 	}
-	consumed, err := service.ConsumeTicket(launch.Ticket, server.ServerID, "conn-1")
+	if launch.ServerID != server.ServerID || launch.Host != "127.0.0.1" || launch.Port != 7777 || launch.WalletAddress != wallet || launch.WalletPlugin != "phantom" {
+		t.Fatalf("launch=%+v", launch)
+	}
+	consumed, err := service.ConsumeTicket(launch.Ticket, server.ServerID)
 	if err != nil {
 		t.Fatalf("consume: %v", err)
 	}
-	if consumed.Online.ServerID != server.ServerID || consumed.Online.ConnectionID != "conn-1" {
-		t.Fatalf("online=%+v", consumed.Online)
+	if consumed.AccountID != login.Account.ID || consumed.ServerID != server.ServerID || consumed.WalletAddress != wallet || consumed.WalletPlugin != "phantom" {
+		t.Fatalf("consume=%+v", consumed)
+	}
+	online, err := service.EnterOnline(login.Account.ID, char.ID, login.SessionID, server.ServerID, "conn-1")
+	if err != nil {
+		t.Fatalf("enter online: %v", err)
+	}
+	if online.ServerID != server.ServerID || online.ConnectionID != "conn-1" {
+		t.Fatalf("online=%+v", online)
 	}
 	if _, err := service.OnlineHeartbeat(login.Account.ID, "conn-1"); err != nil {
 		t.Fatalf("heartbeat: %v", err)
@@ -241,41 +251,63 @@ func TestAcceptingDungeonReconnectIssuesTicketOnlyForOriginServer(t *testing.T) 
 	if decision.Status != "RESUME_READY" || decision.ServerID != "world-a" || decision.Ticket == "" {
 		t.Fatalf("decision=%+v", decision)
 	}
-	if _, err := service.ConsumeTicket(decision.Ticket, "world-b", "wrong-server"); err == nil {
+	if _, err := service.ConsumeTicket(decision.Ticket, "world-b"); err == nil {
 		t.Fatal("resume ticket was accepted by a different server")
 	}
-	consumed, err := service.ConsumeTicket(decision.Ticket, "world-a", "resume-connection")
+	consumed, err := service.ConsumeTicket(decision.Ticket, "world-a")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if consumed.Online.ServerID != "world-a" || consumed.Online.CharacterID != character.ID {
-		t.Fatalf("online=%+v", consumed.Online)
+	if consumed.ServerID != "world-a" || consumed.AccountID != accountRow.ID {
+		t.Fatalf("consume=%+v", consumed)
 	}
 }
 
-func TestActiveDungeonBlocksLaunchingAnotherServer(t *testing.T) {
+func TestLaunchWithoutCharacterAutoSelectsLeastLoadedServer(t *testing.T) {
 	st := store.New()
 	service := NewServiceWithCache(st, redisx.NewMemoryClient(), "test-secret", 24, 60)
-	accountRow := st.UpsertAccountByWallet("cross_server_launch_wallet")
-	character, err := st.CreateCharacter(accountRow.ID, "Cross Server Hero")
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = st.CreateAccountSession(store.CreateSessionRequest{
-		SessionID: "cross-server-session", AccountID: accountRow.ID, RefreshToken: "cross-server-refresh", ExpiresAt: time.Now().UTC().Add(time.Hour),
+	accountRow := st.UpsertAccountByWallet("launch_wallet")
+	_, err := st.CreateAccountSession(store.CreateSessionRequest{
+		SessionID: "launch-session", AccountID: accountRow.ID, RefreshToken: "launch-refresh",
+		WalletPlugin: "phantom", ExpiresAt: time.Now().UTC().Add(time.Hour),
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := st.DungeonEnter(store.DungeonEnterRequest{
-		OpID: "cross-server-enter", AccountID: accountRow.ID, CharacterID: character.ID,
-		ChapterID: 0, FloorID: 1, ServerID: "world-a",
-	}); err != nil {
+	if _, err := st.UpsertGameServer(store.GameServer{ServerID: "world-a", DisplayName: "World A", Host: "10.0.0.1", Port: 7001, MaxPlayers: 100}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.UpsertGameServer(store.GameServer{ServerID: "world-b", DisplayName: "World B", Host: "10.0.0.2", Port: 7002, MaxPlayers: 100}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.HeartbeatGameServer("world-a", 80); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.HeartbeatGameServer("world-b", 12); err != nil {
+		t.Fatal(err)
+	}
+	onlineAccount := st.UpsertAccountByWallet("launch_online_wallet")
+	onlineCharacter, err := st.CreateCharacter(onlineAccount.ID, "OnlineHero")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = st.CreateAccountSession(store.CreateSessionRequest{
+		SessionID: "launch-online-session", AccountID: onlineAccount.ID, RefreshToken: "launch-online-refresh",
+		ExpiresAt: time.Now().UTC().Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.EnterOnline(onlineAccount.ID, onlineCharacter.ID, "launch-online-session", "world-a", "conn-launch-online"); err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := service.Launch(accountRow.ID, character.ID, "cross-server-session", "world-b"); err == nil {
-		t.Fatal("active dungeon allowed launch into a different server")
+	launch, err := service.Launch(accountRow.ID, "launch-session", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if launch.ServerID != "world-b" || launch.Host != "10.0.0.2" || launch.Port != 7002 {
+		t.Fatalf("launch=%+v", launch)
 	}
 }
 
@@ -381,7 +413,7 @@ func TestAbandonInvalidatesPreviouslyIssuedResumeTicket(t *testing.T) {
 	if _, err := service.ResolveDungeonRecovery(accountRow.ID, character.ID, run.DungeonRunID, "abandon", "resume-then-abandon-session"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := service.ConsumeTicket(resume.Ticket, "world-a", "late-resume"); err == nil {
+	if _, err := service.ConsumeTicket(resume.Ticket, "world-a"); err == nil {
 		t.Fatal("resume ticket remained usable after dungeon abandonment")
 	}
 }

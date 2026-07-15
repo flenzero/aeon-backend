@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -179,16 +180,78 @@ func (s *PostgresStore) Account(id int64) (Account, bool) {
 }
 
 func (s *PostgresStore) CreateCharacter(accountID int64, name string) (Character, error) {
-	var character Character
-	err := s.pool.QueryRow(context.Background(), `
-		INSERT INTO characters (account_id, name)
-		VALUES ($1, $2)
-		RETURNING id, account_id, name, created_at, is_deleted
-	`, accountID, name).Scan(&character.ID, &character.AccountID, &character.Name, &character.CreatedAt, &character.Deleted)
+	return s.CreateCharacterWithAppearance(accountID, name, nil)
+}
+
+func (s *PostgresStore) CreateCharacterWithAppearance(accountID int64, name string, appearance map[string]any) (Character, error) {
+	ctx := context.Background()
+	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
 		return Character{}, err
 	}
-	_, err = s.pool.Exec(context.Background(), `
+	defer rollback(ctx, tx)
+	appearanceBytes, err := json.Marshal(nonNilMap(appearance))
+	if err != nil {
+		return Character{}, err
+	}
+	rows, err := tx.Query(ctx, `
+		SELECT slot_index
+		FROM characters
+		WHERE account_id = $1 AND is_deleted = FALSE
+		FOR UPDATE
+	`, accountID)
+	if err != nil {
+		return Character{}, err
+	}
+	used := map[int]bool{}
+	for rows.Next() {
+		var slot int
+		if err := rows.Scan(&slot); err != nil {
+			rows.Close()
+			return Character{}, err
+		}
+		used[slot] = true
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return Character{}, err
+	}
+	slotIndex := -1
+	for candidate := 0; candidate < 3; candidate++ {
+		if !used[candidate] {
+			slotIndex = candidate
+			break
+		}
+	}
+	if slotIndex < 0 {
+		return Character{}, errors.New("character slots are full")
+	}
+	var character Character
+	var appearanceRaw []byte
+	err = tx.QueryRow(ctx, `
+		INSERT INTO characters (account_id, name, slot_index, appearance)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, account_id, name, slot_index, level, appearance, created_at, is_deleted
+	`, accountID, name, slotIndex, appearanceBytes).Scan(
+		&character.ID,
+		&character.AccountID,
+		&character.Name,
+		&character.SlotIndex,
+		&character.Level,
+		&appearanceRaw,
+		&character.CreatedAt,
+		&character.Deleted,
+	)
+	if err != nil {
+		return Character{}, err
+	}
+	if len(appearanceRaw) > 0 {
+		if err := json.Unmarshal(appearanceRaw, &character.Appearance); err != nil {
+			return Character{}, err
+		}
+	}
+	character.LastPlayed = time.Unix(0, 0).UTC()
+	_, err = tx.Exec(ctx, `
 		INSERT INTO character_wallets (character_id)
 		VALUES ($1)
 		ON CONFLICT (character_id) DO NOTHING
@@ -196,23 +259,52 @@ func (s *PostgresStore) CreateCharacter(accountID int64, name string) (Character
 	if err != nil {
 		return Character{}, err
 	}
-	return character, nil
+	_, err = tx.Exec(ctx, `
+		INSERT INTO character_states (character_id)
+		VALUES ($1)
+		ON CONFLICT (character_id) DO NOTHING
+	`, character.ID)
+	if err != nil {
+		return Character{}, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return Character{}, err
+	}
+	return s.attachCharacterEquipment(context.Background(), character)
 }
 
 func (s *PostgresStore) Characters(accountID int64) []Character {
 	rows, err := s.pool.Query(context.Background(), `
-		SELECT id, account_id, name, created_at, is_deleted
-		FROM characters
-		WHERE account_id = $1 AND is_deleted = FALSE
-		ORDER BY id
+		SELECT c.id, c.account_id, c.name, c.slot_index, c.level, c.appearance, c.created_at, COALESCE(st.last_played_at, 'epoch'::timestamptz), st.last_played_at IS NOT NULL, c.is_deleted
+		FROM characters c
+		LEFT JOIN character_states st ON st.character_id = c.id
+		WHERE c.account_id = $1 AND c.is_deleted = FALSE
+		ORDER BY c.slot_index, c.id
 	`, accountID)
 	must(err, "list characters")
 	defer rows.Close()
 	var out []Character
 	for rows.Next() {
 		var row Character
-		must(rows.Scan(&row.ID, &row.AccountID, &row.Name, &row.CreatedAt, &row.Deleted), "scan character")
-		out = append(out, row)
+		var appearanceRaw []byte
+		must(rows.Scan(
+			&row.ID,
+			&row.AccountID,
+			&row.Name,
+			&row.SlotIndex,
+			&row.Level,
+			&appearanceRaw,
+			&row.CreatedAt,
+			&row.LastPlayed,
+			&row.HasLastPlayed,
+			&row.Deleted,
+		), "scan character")
+		if len(appearanceRaw) > 0 {
+			must(json.Unmarshal(appearanceRaw, &row.Appearance), "decode character appearance")
+		}
+		withEquipment, err := s.attachCharacterEquipment(context.Background(), row)
+		must(err, "attach character equipment")
+		out = append(out, withEquipment)
 	}
 	must(rows.Err(), "iterate characters")
 	return out
@@ -220,16 +312,108 @@ func (s *PostgresStore) Characters(accountID int64) []Character {
 
 func (s *PostgresStore) Character(accountID, characterID int64) (Character, bool) {
 	var row Character
+	var appearanceRaw []byte
 	err := s.pool.QueryRow(context.Background(), `
-		SELECT id, account_id, name, created_at, is_deleted
-		FROM characters
-		WHERE account_id = $1 AND id = $2 AND is_deleted = FALSE
-	`, accountID, characterID).Scan(&row.ID, &row.AccountID, &row.Name, &row.CreatedAt, &row.Deleted)
+		SELECT c.id, c.account_id, c.name, c.slot_index, c.level, c.appearance, c.created_at, COALESCE(st.last_played_at, 'epoch'::timestamptz), st.last_played_at IS NOT NULL, c.is_deleted
+		FROM characters c
+		LEFT JOIN character_states st ON st.character_id = c.id
+		WHERE c.account_id = $1 AND c.id = $2 AND c.is_deleted = FALSE
+	`, accountID, characterID).Scan(
+		&row.ID,
+		&row.AccountID,
+		&row.Name,
+		&row.SlotIndex,
+		&row.Level,
+		&appearanceRaw,
+		&row.CreatedAt,
+		&row.LastPlayed,
+		&row.HasLastPlayed,
+		&row.Deleted,
+	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return Character{}, false
 	}
 	must(err, "get character")
+	if len(appearanceRaw) > 0 {
+		must(json.Unmarshal(appearanceRaw, &row.Appearance), "decode character appearance")
+	}
+	row, err = s.attachCharacterEquipment(context.Background(), row)
+	must(err, "attach character equipment")
 	return row, true
+}
+
+func nonNilMap(in map[string]any) map[string]any {
+	if in == nil {
+		return map[string]any{}
+	}
+	return in
+}
+
+func (s *PostgresStore) attachCharacterEquipment(ctx context.Context, character Character) (Character, error) {
+	rows, err := s.pool.Query(ctx, `
+		SELECT
+			e.id,
+			e.equipment_uid,
+			e.item_id,
+			e.rarity,
+			e.enhance_level,
+			COALESCE(e.durability, 0),
+			COALESCE(e.max_durability, 0),
+			e.location,
+			COALESCE(e.equip_slot, -1),
+			COALESCE(e.slot, -1),
+			e.affixes,
+			COALESCE(n.mint_address, '')
+		FROM equipment_items e
+		LEFT JOIN nft_assets n
+			ON n.source_asset_type = 'EQUIPMENT'
+			AND n.source_asset_id = e.id
+			AND n.status IN ('MINT_REQUESTED', 'MINTED')
+		WHERE e.character_id = $1 AND e.location = 'EQUIPPED'
+		ORDER BY e.equip_slot, e.id
+	`, character.ID)
+	if err != nil {
+		return Character{}, err
+	}
+	defer rows.Close()
+	character.EquipmentItems = []EquipmentItem{}
+	for rows.Next() {
+		var row EquipmentItem
+		var nftContract string
+		var affixes []byte
+		if err := rows.Scan(
+			&row.ID,
+			&row.EquipmentUID,
+			&row.ItemID,
+			&row.Rarity,
+			&row.EnhanceLevel,
+			&row.Durability,
+			&row.MaxDurability,
+			&row.Status,
+			&row.EquipSlot,
+			&row.Slot,
+			&affixes,
+			&nftContract,
+		); err != nil {
+			return Character{}, err
+		}
+		if len(affixes) > 0 {
+			if err := json.Unmarshal(affixes, &row.Affixes); err != nil {
+				return Character{}, err
+			}
+		}
+		if nftContract != "" {
+			row.NFTContract = &nftContract
+		}
+		character.EquipmentItems = append(character.EquipmentItems, row)
+	}
+	if err := rows.Err(); err != nil {
+		return Character{}, err
+	}
+	if character.Appearance == nil {
+		character.Appearance = map[string]any{}
+	}
+	return character, nil
 }
 
 func (s *PostgresStore) EconomySnapshot(accountID, characterID int64) (EconomySnapshot, error) {
@@ -568,10 +752,12 @@ func (s *PostgresStore) CancelDungeonRun(accountID, characterID int64, dungeonRu
 		row.Status = "CANCELLED"
 	}
 	if _, err := tx.Exec(ctx, `
-		UPDATE game_tickets
-		SET status='CANCELLED'
-		WHERE account_id=$1 AND character_id=$2 AND status='ACTIVE'
-	`, accountID, characterID); err != nil {
+			UPDATE game_tickets
+			SET status='CANCELLED'
+			WHERE account_id=$1
+			  AND (character_id=$2 OR (character_id IS NULL AND server_id=$3))
+			  AND status='ACTIVE'
+		`, accountID, characterID, row.ServerID); err != nil {
 		return DungeonRunRecovery{}, err
 	}
 	if _, err := fmt.Sscanf(dungeonKeyValue, "chapter:%d:floor:%d", &row.ChapterID, &row.FloorID); err != nil {
@@ -673,6 +859,10 @@ func (s *PostgresStore) DungeonFinish(req DungeonFinishRequest) (DungeonResult, 
 						WHEN highest_cleared_chapter < $2 OR (highest_cleared_chapter = $2 AND highest_cleared_floor < $3) THEN $3
 						ELSE highest_cleared_floor
 					END,
+					highest_cleared_at = CASE
+						WHEN highest_cleared_chapter < $2 OR (highest_cleared_chapter = $2 AND highest_cleared_floor < $3) THEN NOW()
+						ELSE highest_cleared_at
+					END,
 					dungeon_clear_count = dungeon_clear_count + 1,
 					last_dungeon_cleared_at = NOW(), updated_at = NOW()
 				WHERE id = $1 AND account_id = $4
@@ -693,6 +883,12 @@ func (s *PostgresStore) DungeonFinish(req DungeonFinishRequest) (DungeonResult, 
 		}
 		rewards, err := s.applyDungeonRewards(ctx, tx, req)
 		if err != nil {
+			return DungeonResult{}, err
+		}
+		if _, err := s.publishRareRewardAnnouncementsTx(ctx, tx, req.RewardPlan, rareAnnouncementContext{
+			AccountID: req.AccountID, CharacterID: req.CharacterID, Source: "副本掉落",
+			RefType: "dungeon_run", RefID: storedRunID, AnnouncementOn: req.Result == "victory",
+		}); err != nil {
 			return DungeonResult{}, err
 		}
 		if err := s.wearEquippedGear(ctx, tx, req.AccountID, req.CharacterID, req.EquipmentWearPoints, req.DefaultMaxDurability); err != nil {
@@ -966,6 +1162,12 @@ func (s *PostgresStore) BossSettle(req BossSettleRequest) (BossSettleResult, err
 		if err != nil {
 			return BossSettleResult{}, err
 		}
+		if _, err := s.publishRareRewardAnnouncementsTx(ctx, tx, req.RewardPlan, rareAnnouncementContext{
+			AccountID: req.AccountID, CharacterID: req.CharacterID, Source: "Boss结算",
+			RefType: "boss_event", RefID: refID, AnnouncementOn: true,
+		}); err != nil {
+			return BossSettleResult{}, err
+		}
 		rewardPayload := DungeonRewards{
 			TokenReward:    strconv.FormatInt(req.RewardPlan.TokenReward, 10),
 			Items:          applied.Items,
@@ -1031,6 +1233,19 @@ func (s *PostgresStore) runActivitySettlement(scope string, req ActivitySettleme
 		}
 		rewards, err := s.applyRewardsToBag(ctx, tx, req.AccountID, req.CharacterID, req.OpID, req.ActivityID, req.ActivityType, req.RewardPlan)
 		if err != nil {
+			return ActivitySettlementResult{}, err
+		}
+		source := "活动奖励"
+		switch req.ActivityType {
+		case "gathering":
+			source = "采集"
+		case "farming":
+			source = "农场"
+		}
+		if _, err := s.publishRareRewardAnnouncementsTx(ctx, tx, req.RewardPlan, rareAnnouncementContext{
+			AccountID: req.AccountID, CharacterID: req.CharacterID, Source: source,
+			RefType: req.ActivityType, RefID: req.ActivityID, AnnouncementOn: true,
+		}); err != nil {
 			return ActivitySettlementResult{}, err
 		}
 		if req.ActivityType == "gathering" {
@@ -1837,12 +2052,16 @@ func (s *PostgresStore) insertEconomyLedger(ctx context.Context, tx pgx.Tx, acco
 func (s *PostgresStore) SaveTicket(ticket GameTicket) {
 	_, err := s.pool.Exec(context.Background(), `
 		INSERT INTO game_tickets (ticket, account_id, character_id, session_id, server_id, expires_at)
-		VALUES ($1, $2, $3, $4, NULLIF($5, ''), $6)
+		VALUES ($1, $2, NULLIF($3, 0), $4, NULLIF($5, ''), $6)
 	`, ticket.Ticket, ticket.AccountID, ticket.CharacterID, ticket.SessionID, ticket.ServerID, ticket.ExpiresAt)
 	must(err, "save ticket")
 }
 
 func (s *PostgresStore) ConsumeTicket(ticket, serverID string, now time.Time) (GameTicket, error) {
+	serverID = strings.TrimSpace(serverID)
+	if serverID == "" {
+		return GameTicket{}, ErrForbidden
+	}
 	ctx := context.Background()
 	tx, err := s.pool.BeginTx(ctx, pgx.TxOptions{})
 	if err != nil {
@@ -1852,17 +2071,21 @@ func (s *PostgresStore) ConsumeTicket(ticket, serverID string, now time.Time) (G
 	var row GameTicket
 	var status string
 	var storedServerID *string
+	var characterID sql.NullInt64
 	err = tx.QueryRow(ctx, `
 		SELECT ticket, account_id, character_id, session_id, server_id, status, expires_at, consumed_at IS NOT NULL
 		FROM game_tickets
 		WHERE ticket = $1
 		FOR UPDATE
-	`, ticket).Scan(&row.Ticket, &row.AccountID, &row.CharacterID, &row.SessionID, &storedServerID, &status, &row.ExpiresAt, &row.Consumed)
+	`, ticket).Scan(&row.Ticket, &row.AccountID, &characterID, &row.SessionID, &storedServerID, &status, &row.ExpiresAt, &row.Consumed)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return GameTicket{}, ErrNotFound
 	}
 	if err != nil {
 		return GameTicket{}, err
+	}
+	if characterID.Valid {
+		row.CharacterID = characterID.Int64
 	}
 	if storedServerID != nil {
 		row.ServerID = *storedServerID
@@ -1870,7 +2093,22 @@ func (s *PostgresStore) ConsumeTicket(ticket, serverID string, now time.Time) (G
 	if status != "ACTIVE" || row.Consumed || row.ExpiresAt.Before(now) {
 		return GameTicket{}, ErrForbidden
 	}
-	if row.ServerID != "" && serverID != "" && row.ServerID != serverID {
+	if row.ServerID == "" || row.ServerID != serverID {
+		return GameTicket{}, ErrForbidden
+	}
+	var sessionStatus string
+	err = tx.QueryRow(ctx, `
+		SELECT status
+		FROM account_sessions
+		WHERE session_id = $1 AND account_id = $2
+	`, row.SessionID, row.AccountID).Scan(&sessionStatus)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return GameTicket{}, ErrForbidden
+	}
+	if err != nil {
+		return GameTicket{}, err
+	}
+	if sessionStatus != "ACTIVE" {
 		return GameTicket{}, ErrForbidden
 	}
 	_, err = tx.Exec(ctx, `

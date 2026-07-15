@@ -36,9 +36,9 @@ func TestEveryHTTPRouteIsRegisteredAndGuarded(t *testing.T) {
 		endpoints []endpoint
 		wantCount int
 	}{
-		{"account-api", account.NewHandler(cfg, st).Routes(), accountEndpoints(), 23},
-		{"economy-api", economy.NewHandler(cfg, st).Routes(), economyEndpoints(), 50},
-		{"admin-api", admin.NewHandler(cfg, st).Routes(), adminEndpoints(), 52},
+		{"account-api", account.NewHandler(cfg, st).Routes(), accountEndpoints(), 32},
+		{"economy-api", economy.NewHandler(cfg, st).Routes(), economyEndpoints(), 55},
+		{"admin-api", admin.NewHandler(cfg, st).Routes(), adminEndpoints(), 58},
 	}
 
 	for _, service := range tests {
@@ -319,8 +319,13 @@ func accountEndpoints() []endpoint {
 		{"GET", "/api/auth/wallet/nonce?walletAddress=invalid", 400},
 		{"POST", "/api/auth/wallet", 400}, {"POST", "/api/auth/refresh", 401},
 		{"POST", "/api/auth/logout", 401}, {"GET", "/api/auth/verify", 401},
+		{"GET", "/api/public/servers", 200}, {"GET", "/api/public/servers/online", 200},
+		{"GET", "/api/public/home/stats", 200}, {"GET", "/api/public/home/config", 200},
+		{"GET", "/api/public/leaderboards/clear-progress", 200}, {"GET", "/api/public/leaderboards/weekly-score", 200},
 		{"GET", "/api/auth/session/redis", 401}, {"GET", "/api/character/list", 401},
-		{"POST", "/api/character/create", 401}, {"POST", "/api/game/launch", 401},
+		{"POST", "/api/character/create", 401}, {"POST", "/api/character/delete", 401},
+		{"GET", "/api/player/profile", 401}, {"POST", "/api/player/save", 401},
+		{"POST", "/api/game/launch", 401},
 		{"GET", "/api/game/dungeon/recovery", 401}, {"POST", "/api/game/dungeon/recovery", 401},
 		{"POST", "/api/game/launch/consume", 401}, {"POST", "/api/game/servers/register", 401},
 		{"POST", "/api/game/servers/heartbeat", 401}, {"GET", "/api/game/servers", 401},
@@ -333,8 +338,10 @@ func accountEndpoints() []endpoint {
 func economyEndpoints() []endpoint {
 	paths := []struct{ method, path string }{
 		{"GET", "/api/economy/snapshot"},
+		{"GET", "/api/economy/announcements/active"},
 		{"POST", "/api/economy/warehouse/deposit"}, {"POST", "/api/economy/warehouse/withdraw"},
 		{"POST", "/api/economy/equipment/equip"}, {"POST", "/api/economy/equipment/unequip"}, {"POST", "/api/economy/equipment/repair"},
+		{"POST", "/api/economy/shop/buy"}, {"POST", "/api/economy/shop/sell"},
 		{"POST", "/api/economy/nft/mint/request"}, {"POST", "/api/economy/nft/mint/cancel"}, {"POST", "/api/economy/internal/nft/mint/confirm"}, {"GET", "/api/economy/nft/assets"},
 		{"POST", "/api/economy/dungeon/enter"}, {"POST", "/api/economy/dungeon/finish"},
 		{"POST", "/api/economy/loot/claim-player"}, {"POST", "/api/economy/loot/claim-all"}, {"POST", "/api/economy/loot/discard"},
@@ -342,7 +349,7 @@ func economyEndpoints() []endpoint {
 		{"POST", "/api/economy/boss/contribute"}, {"POST", "/api/economy/boss/settle"},
 		{"POST", "/api/economy/internal/boss/events/open"}, {"POST", "/api/economy/internal/boss/events/close"}, {"POST", "/api/economy/internal/boss/events/settle"}, {"GET", "/api/economy/internal/boss/events/active"},
 		{"POST", "/api/economy/inventory/organize"}, {"POST", "/api/economy/warehouse/organize"}, {"POST", "/api/economy/inventory/discard"}, {"POST", "/api/economy/inventory/synthesize"}, {"POST", "/api/economy/inventory/bag/expand"},
-		{"POST", "/api/economy/license/purchase"},
+		{"POST", "/api/economy/license/purchase"}, {"POST", "/api/economy/license/buy"},
 		{"GET", "/api/economy/marketplace/listings"}, {"GET", "/api/economy/marketplace/listings/mine"}, {"GET", "/api/economy/marketplace/slots"},
 		{"POST", "/api/economy/marketplace/list"}, {"POST", "/api/economy/marketplace/listings/1/buy"}, {"POST", "/api/economy/marketplace/listings/1/cancel"},
 		{"POST", "/api/economy/marketplace/slots/expand-material"}, {"POST", "/api/economy/marketplace/slots/expand-wallet"}, {"POST", "/api/economy/marketplace/slots/expand-wallet/submit"},
@@ -351,7 +358,7 @@ func economyEndpoints() []endpoint {
 		{"POST", "/api/economy/internal/unlocks/settle"}, {"POST", "/api/economy/internal/withdrawals/process"},
 		{"POST", "/api/economy/internal/chain/deposits/scan"}, {"POST", "/api/economy/internal/chain/payouts/submit"}, {"POST", "/api/economy/internal/chain/payouts/confirm"}, {"POST", "/api/economy/internal/payments/confirm"},
 	}
-	out := []endpoint{{"GET", "/health", 200}, {"GET", "/ready", 200}}
+	out := []endpoint{{"GET", "/health", 200}, {"GET", "/ready", 200}, {"GET", "/api/announcements/active", 200}}
 	for _, item := range paths {
 		out = append(out, endpoint{item.method, item.path, 401})
 	}
@@ -366,6 +373,8 @@ func adminEndpoints() []endpoint {
 		{"GET", "/api/admin/characters"}, {"GET", "/api/admin/characters/1"}, {"GET", "/api/admin/characters/1/ledger"}, {"GET", "/api/admin/characters/1/audits"}, {"GET", "/api/admin/characters/1/timeline"},
 		{"GET", "/api/admin/equipment/equipment-1"},
 		{"GET", "/api/admin/catalog/items"},
+		{"GET", "/api/admin/announcements"}, {"GET", "/api/admin/announcements/templates"}, {"PUT", "/api/admin/announcements/templates/rare_equipment"},
+		{"POST", "/api/admin/announcements/notices"}, {"PUT", "/api/admin/announcements/notices/1"}, {"POST", "/api/admin/announcements/1/revoke"},
 		{"GET", "/api/admin/market/restrictions"}, {"POST", "/api/admin/market/restrictions"}, {"POST", "/api/admin/market/restrictions/revoke"},
 		{"GET", "/api/admin/risk/events"}, {"POST", "/api/admin/risk/events"}, {"GET", "/api/admin/audits"}, {"GET", "/api/admin/ledger"},
 		{"GET", "/api/admin/withdrawals"}, {"POST", "/api/admin/withdrawals/review"}, {"GET", "/api/admin/payments"}, {"GET", "/api/admin/nft/requests"}, {"POST", "/api/admin/nft/mint/confirm"},

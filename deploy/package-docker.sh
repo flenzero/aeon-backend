@@ -127,6 +127,7 @@ for service in account-api economy-api admin-api economy-worker; do
   context="$BUILD_ROOT/$service"
   mkdir -p "$context"
   build_binary "./cmd/$service" "$context/app"
+  build_binary "./cmd/http-healthcheck" "$context/healthcheck"
   cp "$CA_BUNDLE" "$context/ca-certificates.crt"
   cp -R "$ROOT/configs" "$context/configs"
   find "$context" -name '.DS_Store' -delete

@@ -218,12 +218,7 @@ func (s *PostgresStore) applyAdminRewardsTx(ctx context.Context, tx pgx.Tx, acco
 			}
 		}
 	}
-	items := append([]DungeonRewardGrant(nil), req.Items...)
-	for index := range items {
-		if items[index].EquipmentUID != "" {
-			items[index].EquipmentUID = fmt.Sprintf("%s-c%d-%d", items[index].EquipmentUID, req.CharacterID, index)
-		}
-	}
+	items := scopedAdminRewardItems(req.Items, req.CharacterID)
 	if _, err := s.applyTrayRewards(ctx, tx, accountID, req.CharacterID, req.OpID, req.OpID, "admin_grant", "admin_grant", DungeonRewardPlan{Items: items}); err != nil {
 		return err
 	}
@@ -234,6 +229,16 @@ func (s *PostgresStore) applyAdminRewardsTx(ctx context.Context, tx pgx.Tx, acco
 	}
 	_, err := tx.Exec(ctx, `INSERT INTO admin_audit_logs (admin_id,action,target_type,target_id,reason) VALUES ($1,$2,'character',$3,$4)`, req.AdminID, action, fmt.Sprint(req.CharacterID), req.Reason)
 	return err
+}
+
+func scopedAdminRewardItems(items []DungeonRewardGrant, characterID int64) []DungeonRewardGrant {
+	out := append([]DungeonRewardGrant(nil), items...)
+	for index := range out {
+		if out[index].EquipmentUID != "" {
+			out[index].EquipmentUID = fmt.Sprintf("%s-c%d-%d", out[index].EquipmentUID, characterID, index)
+		}
+	}
+	return out
 }
 
 func (s *PostgresStore) CommitAdminCompensation(req AdminCompensationCommit) (AdminCompensationResult, error) {

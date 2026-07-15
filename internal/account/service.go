@@ -2,9 +2,10 @@ package account
 
 import (
 	"errors"
-	"fmt"
+	"sort"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/flenzero/aeon-backend/internal/chain"
 	"github.com/flenzero/aeon-backend/internal/platform/redisx"
@@ -53,10 +54,17 @@ type WalletLoginResult struct {
 }
 
 type LaunchResult struct {
-	Status    string    `json:"status"`
-	Ticket    string    `json:"ticket"`
-	ExpiresAt time.Time `json:"expiresAt"`
-	ServerID  string    `json:"serverId,omitempty"`
+	Status         string    `json:"status"`
+	Ticket         string    `json:"ticket"`
+	ExpiresIn      int64     `json:"expiresIn"`
+	ExpiresAt      time.Time `json:"expiresAt"`
+	ServerID       string    `json:"serverId"`
+	Host           string    `json:"host"`
+	Port           int       `json:"port"`
+	PublicEndpoint string    `json:"publicEndpoint,omitempty"`
+	WalletAddress  string    `json:"walletAddress"`
+	WalletPlugin   string    `json:"walletPlugin,omitempty"`
+	GameURL        string    `json:"gameUrl,omitempty"`
 }
 
 type DungeonRecoveryDecision struct {
@@ -124,14 +132,60 @@ func (s *Service) WalletLogin(wallet, nonce, signature string, meta LoginMeta) (
 }
 
 func (s *Service) CreateCharacter(accountID int64, name string) (store.Character, error) {
-	name = strings.TrimSpace(name)
-	if name == "" {
-		name = "Player"
-	}
-	return s.store.CreateCharacter(accountID, name)
+	return s.CreateCharacterWithAppearance(accountID, name, nil)
 }
 
-func (s *Service) Launch(accountID, characterID int64, sessionID, serverID string) (LaunchResult, error) {
+func (s *Service) CreateCharacterWithAppearance(accountID int64, name string, appearance map[string]any) (store.Character, error) {
+	name = strings.TrimSpace(name)
+	if !validCharacterName(name) {
+		return store.Character{}, errors.New("character name must be 2-12 Chinese characters, letters, digits, or underscores")
+	}
+	return s.store.CreateCharacterWithAppearance(accountID, name, appearance)
+}
+
+func (s *Service) DeleteCharacter(accountID, characterID int64) error {
+	return s.store.DeleteCharacter(accountID, characterID)
+}
+
+func (s *Service) PlayerProfile(accountID, characterID int64) (store.PlayerState, store.EconomySnapshot, error) {
+	player, err := s.store.PlayerProfile(accountID, characterID)
+	if err != nil {
+		return store.PlayerState{}, store.EconomySnapshot{}, err
+	}
+	economy, err := s.store.EconomySnapshot(accountID, characterID)
+	if err != nil {
+		return store.PlayerState{}, store.EconomySnapshot{}, err
+	}
+	return player, economy, nil
+}
+
+func (s *Service) SavePlayerState(req store.PlayerSaveRequest) error {
+	return s.store.SavePlayerState(req)
+}
+
+func (s *Service) ClearProgressLeaderboard(limit int) (store.ClearProgressLeaderboard, error) {
+	return s.store.ClearProgressLeaderboard(limit)
+}
+
+func (s *Service) WeeklyScoreLeaderboard(now time.Time, limit int) (store.WeeklyScoreLeaderboard, error) {
+	return s.store.WeeklyScoreLeaderboard(now, limit)
+}
+
+func validCharacterName(name string) bool {
+	runes := []rune(name)
+	if len(runes) < 2 || len(runes) > 12 {
+		return false
+	}
+	for _, r := range runes {
+		if r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r) || unicode.Is(unicode.Han, r) {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+func (s *Service) Launch(accountID int64, sessionID, serverID string) (LaunchResult, error) {
 	account, ok := s.store.Account(accountID)
 	if !ok {
 		return LaunchResult{}, store.ErrNotFound
@@ -139,56 +193,217 @@ func (s *Service) Launch(accountID, characterID int64, sessionID, serverID strin
 	if account.IsBanned {
 		return LaunchResult{}, errors.New("account is banned")
 	}
-	if _, ok := s.store.Character(accountID, characterID); !ok {
-		return LaunchResult{}, errors.New("character not found")
-	}
-	if recovery, err := s.store.ActiveDungeonRun(accountID, characterID); err == nil {
-		originServerID := strings.TrimSpace(recovery.ServerID)
-		if originServerID == "" {
-			return LaunchResult{}, errors.New("active dungeon origin server is unavailable; abandon the dungeon first")
-		}
-		if strings.TrimSpace(serverID) != originServerID {
-			return LaunchResult{}, fmt.Errorf("active dungeon must reconnect to server %s or be abandoned", originServerID)
-		}
-	} else if !errors.Is(err, store.ErrNotFound) {
-		return LaunchResult{}, err
-	}
 	if err := s.RequireActiveSession(sessionID, accountID); err != nil {
 		return LaunchResult{}, err
 	}
+	session, err := s.store.GetAccountSession(strings.TrimSpace(sessionID))
+	if err != nil {
+		return LaunchResult{}, err
+	}
+	server, err := s.selectLaunchServer(serverID)
+	if err != nil {
+		return LaunchResult{}, err
+	}
 	ticket := security.RandomToken("ticket")
-	expiresAt := time.Now().UTC().Add(90 * time.Second)
+	expiresIn := int64(90)
+	expiresAt := time.Now().UTC().Add(time.Duration(expiresIn) * time.Second)
 	s.store.SaveTicket(store.GameTicket{
-		Ticket:      ticket,
-		AccountID:   accountID,
-		CharacterID: characterID,
-		ServerID:    strings.TrimSpace(serverID),
-		SessionID:   sessionID,
-		ExpiresAt:   expiresAt,
+		Ticket:    ticket,
+		AccountID: accountID,
+		ServerID:  server.ServerID,
+		SessionID: strings.TrimSpace(sessionID),
+		ExpiresAt: expiresAt,
 	})
-	return LaunchResult{Status: "ready", Ticket: ticket, ExpiresAt: expiresAt, ServerID: serverID}, nil
+	return LaunchResult{
+		Status: "ready", Ticket: ticket, ExpiresIn: expiresIn, ExpiresAt: expiresAt,
+		ServerID: server.ServerID, Host: server.Host, Port: server.Port, PublicEndpoint: server.PublicEndpoint,
+		WalletAddress: account.WalletAddress, WalletPlugin: strings.TrimSpace(session.WalletPlugin),
+	}, nil
 }
 
 type ConsumeTicketResult struct {
-	Ticket store.GameTicket    `json:"ticket"`
-	Online store.OnlineSession `json:"online"`
+	AccountID     int64  `json:"accountId"`
+	WalletAddress string `json:"walletAddress"`
+	WalletPlugin  string `json:"walletPlugin,omitempty"`
+	SessionID     string `json:"sessionId"`
+	ServerID      string `json:"serverId"`
 }
 
-func (s *Service) ConsumeTicket(ticket, serverID, connectionID string) (ConsumeTicketResult, error) {
-	row, err := s.store.ConsumeTicket(strings.TrimSpace(ticket), strings.TrimSpace(serverID), time.Now().UTC())
+func (s *Service) ConsumeTicket(ticket, serverID string) (ConsumeTicketResult, error) {
+	serverID = strings.TrimSpace(serverID)
+	if serverID == "" {
+		return ConsumeTicketResult{}, errors.New("serverId is required")
+	}
+	row, err := s.store.ConsumeTicket(strings.TrimSpace(ticket), serverID, time.Now().UTC())
 	if err != nil {
 		return ConsumeTicketResult{}, err
 	}
-	sid := strings.TrimSpace(serverID)
-	if sid == "" {
-		sid = row.ServerID
+	if row.ServerID != serverID {
+		return ConsumeTicketResult{}, store.ErrForbidden
 	}
-	if sid == "" {
-		return ConsumeTicketResult{}, errors.New("serverId is required to enter online session")
+	account, ok := s.store.Account(row.AccountID)
+	if !ok || account.IsBanned {
+		return ConsumeTicketResult{}, errors.New("account unavailable")
 	}
-	online, err := s.EnterOnline(row.AccountID, row.CharacterID, row.SessionID, sid, connectionID)
+	session, err := s.store.GetAccountSession(row.SessionID)
 	if err != nil {
 		return ConsumeTicketResult{}, err
 	}
-	return ConsumeTicketResult{Ticket: row, Online: online}, nil
+	return ConsumeTicketResult{
+		AccountID: row.AccountID, WalletAddress: account.WalletAddress, WalletPlugin: strings.TrimSpace(session.WalletPlugin),
+		SessionID: row.SessionID, ServerID: row.ServerID,
+	}, nil
+}
+
+type PublicServerView struct {
+	ServerID    string `json:"serverId"`
+	Name        string `json:"name"`
+	CurPlayers  int    `json:"curPlayers"`
+	MaxPlayers  int    `json:"maxPlayers"`
+	Status      string `json:"status"`
+	QueueLength int    `json:"queueLength"`
+	Region      string `json:"region,omitempty"`
+}
+
+type HomeStatsResult struct {
+	OnlinePlayers        int       `json:"onlinePlayers"`
+	MonthlyActivePlayers int       `json:"monthlyActivePlayers"`
+	UpdatedAt            time.Time `json:"updatedAt"`
+}
+
+const launchServerHeartbeatWindow = 30 * time.Second
+
+func (s *Service) PublicGameServers(onlineOnly bool) ([]PublicServerView, error) {
+	rows, err := s.store.ListGameServers("")
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now().UTC()
+	counts, err := s.onlinePresenceCounts(rows, now)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]PublicServerView, 0, len(rows))
+	for _, row := range rows {
+		view := publicServerView(row, now, counts[row.ServerID])
+		if onlineOnly && view.Status != "online" {
+			continue
+		}
+		out = append(out, view)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Status != out[j].Status {
+			return publicStatusRank(out[i].Status) < publicStatusRank(out[j].Status)
+		}
+		if out[i].CurPlayers != out[j].CurPlayers {
+			return out[i].CurPlayers < out[j].CurPlayers
+		}
+		return out[i].ServerID < out[j].ServerID
+	})
+	return out, nil
+}
+
+func (s *Service) HomeStats() (HomeStatsResult, error) {
+	now := time.Now().UTC()
+	rows, err := s.store.ListGameServers("")
+	if err != nil {
+		return HomeStatsResult{}, err
+	}
+	counts, err := s.onlinePresenceCounts(rows, now)
+	if err != nil {
+		return HomeStatsResult{}, err
+	}
+	totalOnline := 0
+	for _, count := range counts {
+		totalOnline += count
+	}
+	mau, err := s.store.CountMonthlyActiveAccounts(now.AddDate(0, 0, -30))
+	if err != nil {
+		return HomeStatsResult{}, err
+	}
+	return HomeStatsResult{
+		OnlinePlayers:        totalOnline,
+		MonthlyActivePlayers: mau,
+		UpdatedAt:            now,
+	}, nil
+}
+
+func (s *Service) selectLaunchServer(serverID string) (store.GameServer, error) {
+	serverID = strings.TrimSpace(serverID)
+	rows, err := s.store.ListGameServers("")
+	if err != nil {
+		return store.GameServer{}, err
+	}
+	now := time.Now().UTC()
+	counts, err := s.onlinePresenceCounts(rows, now)
+	if err != nil {
+		return store.GameServer{}, err
+	}
+	var candidates []store.GameServer
+	for _, row := range rows {
+		status := publicServerStatus(row, now, counts[row.ServerID])
+		if serverID != "" {
+			if row.ServerID == serverID {
+				if status != "online" {
+					return store.GameServer{}, errors.New("serverId is unavailable")
+				}
+				return row, nil
+			}
+			continue
+		}
+		if status == "online" {
+			candidates = append(candidates, row)
+		}
+	}
+	if serverID != "" {
+		return store.GameServer{}, errors.New("serverId is unavailable")
+	}
+	if len(candidates) == 0 {
+		return store.GameServer{}, errors.New("no available game server")
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		left := counts[candidates[i].ServerID]
+		right := counts[candidates[j].ServerID]
+		if left != right {
+			return left < right
+		}
+		return candidates[i].ServerID < candidates[j].ServerID
+	})
+	return candidates[0], nil
+}
+
+func publicServerView(server store.GameServer, now time.Time, curPlayers int) PublicServerView {
+	return PublicServerView{
+		ServerID: server.ServerID, Name: server.DisplayName, CurPlayers: curPlayers,
+		MaxPlayers: server.MaxPlayers, Status: publicServerStatus(server, now, curPlayers), QueueLength: 0, Region: server.Region,
+	}
+}
+
+func publicServerStatus(server store.GameServer, now time.Time, curPlayers int) string {
+	live := server.LastHeartbeatAt != nil && !server.LastHeartbeatAt.Before(now.Add(-launchServerHeartbeatWindow))
+	if strings.ToUpper(strings.TrimSpace(server.Status)) != "ONLINE" || !live {
+		return "offline"
+	}
+	if server.MaxPlayers > 0 && curPlayers >= publicFullThreshold(server.MaxPlayers) {
+		return "full"
+	}
+	return "online"
+}
+
+func publicFullThreshold(maxPlayers int) int {
+	if maxPlayers <= 0 {
+		return 0
+	}
+	return (maxPlayers*95 + 99) / 100
+}
+
+func publicStatusRank(status string) int {
+	switch status {
+	case "online":
+		return 0
+	case "full":
+		return 1
+	default:
+		return 2
+	}
 }

@@ -60,10 +60,26 @@ type Repository interface {
 	ListServiceIdentities(status string, limit, offset int) ([]ServiceIdentity, error)
 	DisableServiceIdentity(serviceID, disabledBy, reason string) (ServiceIdentity, error)
 	ConsumeServiceNonce(serviceID, nonce string, expiresAt time.Time) error
+	ListAnnouncementTemplates(kind string) ([]AnnouncementTemplate, error)
+	UpsertAnnouncementTemplate(in UpsertAnnouncementTemplateInput) (AnnouncementTemplate, error)
+	ListAnnouncements(filter AnnouncementFilter) ([]Announcement, error)
+	ListActiveAnnouncements(kind string, now time.Time, afterID int64, limit int) ([]Announcement, error)
+	CreateOpsAnnouncement(in CreateOpsAnnouncementInput) (Announcement, error)
+	UpdateOpsAnnouncement(id int64, in UpdateOpsAnnouncementInput) (Announcement, error)
+	RevokeAnnouncement(id int64, adminID, reason string) (Announcement, error)
 	CreateCharacter(accountID int64, name string) (Character, error)
+	CreateCharacterWithAppearance(accountID int64, name string, appearance map[string]any) (Character, error)
 	Characters(accountID int64) []Character
 	Character(accountID, characterID int64) (Character, bool)
+	DeleteCharacter(accountID, characterID int64) error
+	PlayerProfile(accountID, characterID int64) (PlayerState, error)
+	SavePlayerState(req PlayerSaveRequest) error
+	ClearProgressLeaderboard(limit int) (ClearProgressLeaderboard, error)
+	WeeklyScoreLeaderboard(now time.Time, limit int) (WeeklyScoreLeaderboard, error)
 	EconomySnapshot(accountID, characterID int64) (EconomySnapshot, error)
+	ShopBuyGold(req ShopBuyRequest) (ShopBuyResult, error)
+	CreateShopBuyPayment(req ShopBuyRequest) (ShopBuyResult, error)
+	ShopSell(req ShopSellRequest) (ShopSellResult, error)
 	WarehouseDeposit(req EconomyActionRequest) (EconomySnapshot, error)
 	WarehouseWithdraw(req EconomyActionRequest) (EconomySnapshot, error)
 	EquipItem(req EconomyActionRequest) (EconomySnapshot, error)
@@ -125,6 +141,7 @@ type Repository interface {
 	SaveTicket(ticket GameTicket)
 	ConsumeTicket(ticket, serverID string, now time.Time) (GameTicket, error)
 	CreateAccountSession(req CreateSessionRequest) (AccountSession, error)
+	CountMonthlyActiveAccounts(since time.Time) (int, error)
 	GetAccountSession(sessionID string) (AccountSession, error)
 	TouchAccountSession(sessionID string, now time.Time) error
 	RevokeAccountSession(sessionID string, now time.Time) error

@@ -11,13 +11,19 @@ if [[ ! -d "$image_dir" ]]; then
 fi
 
 found=false
+loaded_images=()
 for image_tar in "$image_dir"/*.tar; do
   if [[ ! -f "$image_tar" ]]; then
     continue
   fi
   found=true
   echo "Loading $(basename "$image_tar")"
-  docker load -i "$image_tar"
+  while IFS= read -r line; do
+    echo "$line"
+    if [[ "$line" == Loaded\ image:\ * ]]; then
+      loaded_images+=("${line#Loaded image: }")
+    fi
+  done < <(docker load -i "$image_tar")
 done
 
 if [[ "$found" != "true" ]]; then
@@ -32,20 +38,23 @@ if [[ -f "$AEON_ENV_FILE" ]]; then
   set +a
 fi
 
-release_tag="$(aeon_release_value image_tag || true)"
 channel_tag="${CHANNEL_TAG:-latest}"
-if [[ -n "$release_tag" ]]; then
-  for image_name in \
-    "${ACCOUNT_API_IMAGE:-aeonblight/account-api}" \
-    "${ECONOMY_API_IMAGE:-aeonblight/economy-api}" \
-    "${ADMIN_API_IMAGE:-aeonblight/admin-api}" \
-    "${ECONOMY_WORKER_IMAGE:-aeonblight/economy-worker}" \
-    "${MIGRATOR_IMAGE:-aeonblight/db-migrate}"; do
-    if docker image inspect "$image_name:$release_tag" >/dev/null 2>&1; then
-      docker tag "$image_name:$release_tag" "$image_name:$channel_tag"
-      echo "Tagged $image_name:$release_tag as $image_name:$channel_tag"
+for image_name in \
+  "${ACCOUNT_API_IMAGE:-aeonblight/account-api}" \
+  "${ECONOMY_API_IMAGE:-aeonblight/economy-api}" \
+  "${ADMIN_API_IMAGE:-aeonblight/admin-api}" \
+  "${ECONOMY_WORKER_IMAGE:-aeonblight/economy-worker}" \
+  "${MIGRATOR_IMAGE:-aeonblight/db-migrate}"; do
+  selected_image=""
+  for loaded_image in "${loaded_images[@]}"; do
+    if [[ "$loaded_image" == "$image_name:"* ]]; then
+      selected_image="$loaded_image"
     fi
   done
-fi
+  if [[ -n "$selected_image" && "$selected_image" != "$image_name:$channel_tag" ]]; then
+    docker tag "$selected_image" "$image_name:$channel_tag"
+    echo "Tagged $selected_image as $image_name:$channel_tag"
+  fi
+done
 
 echo "Docker images loaded"

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -40,6 +41,7 @@ func (h *Handler) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", httpx.Health(h.cfg.ServiceName))
 	mux.Handle("GET /ready", h.ready.Handler())
+	mux.HandleFunc("GET /api/announcements/active", h.publicActiveAnnouncements)
 	gameplay := func(next http.HandlerFunc) http.HandlerFunc {
 		return httpx.RequireService(h.cfg, h.store, "economy.gameplay", next)
 	}
@@ -59,6 +61,7 @@ func (h *Handler) Routes() http.Handler {
 		return httpx.RequireService(h.cfg, h.store, "economy.payments", next)
 	}
 	mux.HandleFunc("GET /api/economy/snapshot", gameplay(h.snapshot))
+	mux.HandleFunc("GET /api/economy/announcements/active", gameplay(h.activeAnnouncements))
 	mux.HandleFunc("POST /api/economy/warehouse/deposit", gameplay(h.warehouseDeposit))
 	mux.HandleFunc("POST /api/economy/warehouse/withdraw", gameplay(h.warehouseWithdraw))
 	mux.HandleFunc("POST /api/economy/equipment/equip", gameplay(h.equipItem))
@@ -66,6 +69,8 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("POST /api/economy/equipment/repair", gameplay(h.equipmentRepair))
 	mux.HandleFunc("POST /api/economy/equipment/enhance", gameplay(h.equipmentEnhance))
 	mux.HandleFunc("POST /api/economy/equipment/npc-recycle", gameplay(h.equipmentNPCRecycle))
+	mux.HandleFunc("POST /api/economy/shop/buy", gameplay(h.shopBuy))
+	mux.HandleFunc("POST /api/economy/shop/sell", gameplay(h.shopSell))
 	mux.HandleFunc("POST /api/economy/lottery/draw", gameplay(h.lotteryDraw))
 	mux.HandleFunc("GET /api/economy/bounty/board", gameplay(h.bountyBoard))
 	mux.HandleFunc("POST /api/economy/bounty/slots/unlock-gold", gameplay(h.bountyUnlockGold))
@@ -98,6 +103,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("POST /api/economy/inventory/synthesize", gameplay(h.inventorySynthesize))
 	mux.HandleFunc("POST /api/economy/inventory/bag/expand", gameplay(h.bagExpand))
 	mux.HandleFunc("POST /api/economy/license/purchase", gameplay(h.licensePurchase))
+	mux.HandleFunc("POST /api/economy/license/buy", gameplay(h.licensePurchase))
 	mux.HandleFunc("GET /api/economy/marketplace/listings", gameplay(h.marketplaceListings))
 	mux.HandleFunc("GET /api/economy/marketplace/listings/mine", gameplay(h.marketplaceMyListings))
 	mux.HandleFunc("GET /api/economy/marketplace/slots", gameplay(h.marketplaceSlots))
@@ -138,6 +144,36 @@ func (h *Handler) snapshot(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpx.OK(w, snapshot)
+}
+
+func (h *Handler) activeAnnouncements(w http.ResponseWriter, r *http.Request) {
+	h.writeActiveAnnouncements(w, r, "")
+}
+
+func (h *Handler) publicActiveAnnouncements(w http.ResponseWriter, r *http.Request) {
+	h.writeActiveAnnouncements(w, r, store.AnnouncementKindOpsNotice)
+}
+
+func (h *Handler) writeActiveAnnouncements(w http.ResponseWriter, r *http.Request, kind string) {
+	limit, _, err := httpx.Pagination(r, 50, 200)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 400, err.Error())
+		return
+	}
+	afterID := int64(0)
+	if raw := strings.TrimSpace(r.URL.Query().Get("afterId")); raw != "" {
+		afterID, err = strconv.ParseInt(raw, 10, 64)
+		if err != nil || afterID < 0 {
+			httpx.Error(w, http.StatusBadRequest, 400, "afterId must be non-negative")
+			return
+		}
+	}
+	rows, err := h.store.ListActiveAnnouncements(kind, time.Now().UTC(), afterID, limit)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 400, err.Error())
+		return
+	}
+	httpx.OK(w, map[string]any{"items": rows, "count": len(rows), "afterId": afterID})
 }
 
 type economyActionBody struct {
@@ -344,6 +380,75 @@ func (h *Handler) equipmentNPCRecycle(w http.ResponseWriter, r *http.Request) {
 	result, err := h.service.EquipmentNPCRecycle(body.OpID, accountID, characterID, body.EquipmentUID)
 	if err != nil {
 		httpx.Error(w, http.StatusBadRequest, 3603, err.Error())
+		return
+	}
+	httpx.OK(w, result)
+}
+
+func (h *Handler) shopBuy(w http.ResponseWriter, r *http.Request) {
+	accountID, err := httpx.AccountID(r)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 2006, err.Error())
+		return
+	}
+	var body struct {
+		OpID        string `json:"opId"`
+		CharacterID int64  `json:"characterId"`
+		ShopID      string `json:"shopId"`
+		ItemID      string `json:"itemId"`
+		Quantity    int64  `json:"quantity"`
+	}
+	if !httpx.Decode(r, &body) {
+		httpx.Error(w, http.StatusBadRequest, 400, "invalid JSON body")
+		return
+	}
+	if body.CharacterID == 0 {
+		body.CharacterID, err = httpx.CharacterID(r)
+		if err != nil {
+			httpx.Error(w, http.StatusBadRequest, 2007, err.Error())
+			return
+		}
+	}
+	result, err := h.service.ShopBuy(body.OpID, accountID, body.CharacterID, body.ShopID, body.ItemID, body.Quantity)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 3000, err.Error())
+		return
+	}
+	httpx.OK(w, result)
+}
+
+func (h *Handler) shopSell(w http.ResponseWriter, r *http.Request) {
+	accountID, err := httpx.AccountID(r)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 2006, err.Error())
+		return
+	}
+	var body struct {
+		OpID         string `json:"opId"`
+		CharacterID  int64  `json:"characterId"`
+		ShopID       string `json:"shopId"`
+		SlotIndex    *int   `json:"slotIndex"`
+		Quantity     int64  `json:"quantity"`
+		EquipmentUID string `json:"equipmentUid"`
+	}
+	if !httpx.Decode(r, &body) {
+		httpx.Error(w, http.StatusBadRequest, 400, "invalid JSON body")
+		return
+	}
+	if body.CharacterID == 0 {
+		body.CharacterID, err = httpx.CharacterID(r)
+		if err != nil {
+			httpx.Error(w, http.StatusBadRequest, 2007, err.Error())
+			return
+		}
+	}
+	slotIndex := -1
+	if body.SlotIndex != nil {
+		slotIndex = *body.SlotIndex
+	}
+	result, err := h.service.ShopSell(body.OpID, accountID, body.CharacterID, body.ShopID, slotIndex, body.Quantity, body.EquipmentUID)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 3000, err.Error())
 		return
 	}
 	httpx.OK(w, result)

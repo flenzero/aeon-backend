@@ -70,6 +70,8 @@ They coordinate through durable rows, not process memory.
 - `admin_users`
 - `admin_login_nonces`
 - `admin_audit_logs`
+- `announcement_templates`
+- `announcements`
 - `economy_config_versions`
 - `revenue_events`
 - `revenue_allocations`

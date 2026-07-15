@@ -16,6 +16,9 @@ type Config struct {
 	Addr                  string
 	EconomyAPIURL         string
 	EconomyConfigDir      string
+	GameClientBaseURL     string
+	TokenSymbol           string
+	SupportWallets        []string
 	DatabaseURL           string
 	RequiredSchemaVersion string
 	InternalKey           string
@@ -77,8 +80,11 @@ func Load(serviceName, defaultAddr string) Config {
 		Addr:                      env("ADDR", defaultAddr),
 		EconomyAPIURL:             env("ECONOMY_API_URL", "http://localhost:8082"),
 		EconomyConfigDir:          env("ECONOMY_CONFIG_DIR", "configs/economy"),
+		GameClientBaseURL:         env("GAME_CLIENT_BASE_URL", ""),
+		TokenSymbol:               env("TOKEN_SYMBOL", "AEB"),
+		SupportWallets:            envList("SUPPORT_WALLETS", []string{"phantom", "solflare", "backpack", "okx"}),
 		DatabaseURL:               env("DATABASE_URL", ""),
-		RequiredSchemaVersion:     env("REQUIRED_SCHEMA_VERSION", "20260714_admin_signed_login_v1"),
+		RequiredSchemaVersion:     env("REQUIRED_SCHEMA_VERSION", "20260715_account_launch_admission_v1"),
 		InternalKey:               envAllowEmpty("INTERNAL_KEY", "dev-internal-key"),
 		JWTSecret:                 env("JWT_SECRET", "dev-jwt-secret"),
 		AdminToken:                env("ADMIN_TOKEN", defaultAdminToken),
@@ -158,6 +164,25 @@ func envInt(key string, fallback int) int {
 		return fallback
 	}
 	return parsed
+}
+
+func envList(key string, fallback []string) []string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return append([]string(nil), fallback...)
+	}
+	parts := strings.Split(value, ",")
+	out := make([]string, 0, len(parts))
+	for _, part := range parts {
+		item := strings.TrimSpace(part)
+		if item != "" {
+			out = append(out, item)
+		}
+	}
+	if len(out) == 0 {
+		return append([]string(nil), fallback...)
+	}
+	return out
 }
 
 func envBool(key string, fallback bool) bool {

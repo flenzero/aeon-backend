@@ -60,8 +60,8 @@ func TestEveryInternalRouteRejectsWrongServiceCapability(t *testing.T) {
 	accountHandler := account.NewHandler(cfg, st).Routes()
 	economyHandler := economy.NewHandler(cfg, st).Routes()
 	routes := serviceCapabilityRoutes()
-	if len(routes) != 61 {
-		t.Fatalf("capability route manifest has %d routes, want 61", len(routes))
+	if len(routes) != 68 {
+		t.Fatalf("capability route manifest has %d routes, want 68", len(routes))
 	}
 	for i, route := range routes {
 		name := fmt.Sprintf("%s_%s_%s", route.service, route.method, route.target)
@@ -109,7 +109,8 @@ func serviceCapabilityRoutes() []capabilityRoute {
 		[2]string{"POST", "/api/game/online/sweep"},
 	)
 	add("account", "account.gameplay",
-		[2]string{"GET", "/api/character/list"}, [2]string{"POST", "/api/character/create"},
+		[2]string{"GET", "/api/character/list"}, [2]string{"POST", "/api/character/create"}, [2]string{"POST", "/api/character/delete"},
+		[2]string{"GET", "/api/player/profile"}, [2]string{"POST", "/api/player/save"},
 		[2]string{"POST", "/api/game/launch/consume"}, [2]string{"POST", "/api/game/servers/register"},
 		[2]string{"POST", "/api/game/servers/heartbeat"}, [2]string{"GET", "/api/game/servers"},
 		[2]string{"POST", "/api/game/online/enter"}, [2]string{"POST", "/api/game/online/heartbeat"},
@@ -118,8 +119,10 @@ func serviceCapabilityRoutes() []capabilityRoute {
 	)
 	add("economy", "economy.gameplay",
 		[2]string{"GET", "/api/economy/snapshot"},
+		[2]string{"GET", "/api/economy/announcements/active"},
 		[2]string{"POST", "/api/economy/warehouse/deposit"}, [2]string{"POST", "/api/economy/warehouse/withdraw"},
 		[2]string{"POST", "/api/economy/equipment/equip"}, [2]string{"POST", "/api/economy/equipment/unequip"}, [2]string{"POST", "/api/economy/equipment/repair"},
+		[2]string{"POST", "/api/economy/shop/buy"}, [2]string{"POST", "/api/economy/shop/sell"},
 		[2]string{"POST", "/api/economy/nft/mint/request"}, [2]string{"POST", "/api/economy/nft/mint/cancel"}, [2]string{"GET", "/api/economy/nft/assets"},
 		[2]string{"POST", "/api/economy/dungeon/enter"}, [2]string{"POST", "/api/economy/dungeon/finish"},
 		[2]string{"POST", "/api/economy/loot/claim-player"}, [2]string{"POST", "/api/economy/loot/claim-all"}, [2]string{"POST", "/api/economy/loot/discard"},
@@ -127,7 +130,7 @@ func serviceCapabilityRoutes() []capabilityRoute {
 		[2]string{"POST", "/api/economy/boss/contribute"}, [2]string{"POST", "/api/economy/boss/settle"},
 		[2]string{"POST", "/api/economy/inventory/organize"}, [2]string{"POST", "/api/economy/warehouse/organize"},
 		[2]string{"POST", "/api/economy/inventory/discard"}, [2]string{"POST", "/api/economy/inventory/synthesize"},
-		[2]string{"POST", "/api/economy/inventory/bag/expand"}, [2]string{"POST", "/api/economy/license/purchase"},
+		[2]string{"POST", "/api/economy/inventory/bag/expand"}, [2]string{"POST", "/api/economy/license/purchase"}, [2]string{"POST", "/api/economy/license/buy"},
 		[2]string{"GET", "/api/economy/marketplace/listings"}, [2]string{"GET", "/api/economy/marketplace/listings/mine"}, [2]string{"GET", "/api/economy/marketplace/slots"},
 		[2]string{"POST", "/api/economy/marketplace/list"}, [2]string{"POST", "/api/economy/marketplace/listings/1/buy"}, [2]string{"POST", "/api/economy/marketplace/listings/1/cancel"},
 		[2]string{"POST", "/api/economy/marketplace/slots/expand-material"}, [2]string{"POST", "/api/economy/marketplace/slots/expand-wallet"},

@@ -48,7 +48,7 @@ for service in account-api economy-api admin-api economy-worker; do
 done
 
 if [[ "$SCOPE" == "contract" ]]; then
-  echo "PASS: unit/contract tests, 116 HTTP routes, Solana RPC contract, NFT lifecycle, and four builds"
+  echo "PASS: unit/contract tests, 118 HTTP routes, Solana RPC contract, NFT lifecycle, and four builds"
   exit 0
 fi
 
@@ -109,7 +109,7 @@ start_service() {
     INTERNAL_KEY=dev-internal-key \
     JWT_SECRET=dev-jwt-secret \
     ADMIN_TOKEN=dev-admin-token \
-    REQUIRED_SCHEMA_VERSION=20260714_admin_signed_login_v1 \
+    REQUIRED_SCHEMA_VERSION=20260715_account_launch_admission_v1 \
     ADDR="$addr" \
     "$@" "$BIN_DIR/$service" >"$LOG_DIR/$service.log" 2>&1 &
   PIDS+=("$!")
@@ -156,4 +156,4 @@ if ! grep -q "worker tick completed" "$LOG_DIR/economy-worker.log"; then
   exit 1
 fi
 
-echo "PASS: full local stack, 116 HTTP routes, readiness, Solana contracts, NFT lifecycle, integration tests, and four modules"
+echo "PASS: full local stack, 118 HTTP routes, readiness, Solana contracts, NFT lifecycle, integration tests, and four modules"

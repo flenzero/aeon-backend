@@ -17,8 +17,8 @@
 
 ## 域名转发
 
-- `api.aeonblight.com/api/auth/*`、`/api/character/*`、`/api/game/*` 转发到 `account-api`
-- `api.aeonblight.com/api/economy/*`、`/api/chain/*` 转发到 `economy-api`
+- `api.aeonblight.com/api/auth/*`、`/api/public/*`、`/api/character/*`、`/api/game/*` 转发到 `account-api`
+- `api.aeonblight.com/api/economy/*`、`/api/announcements/*`、`/api/chain/*` 转发到 `economy-api`
 - `api.aeonblight.com/api/admin/*` 转发到 `admin-api`
 - `game.aeonblight.com/*` 转发到 `.env` 里的 `GAME_UPSTREAM`，并带 WebSocket 头
 
@@ -46,6 +46,8 @@ outputs/packages/aeonblight-server-时间戳
 ```
 
 `aeonblight-server` 不带时间戳，方便每次覆盖传输；`aeonblight-server-时间戳` 用于本地备份和回滚。目录里面会有 `images/*.tar`，它们是 Docker 镜像归档，不是源码压缩包。
+
+`RELEASE.txt` 只是人工查看包版本的信息文件。部署脚本不依赖它；`ops/load-images.sh` 会直接读取 `images/*.tar`，并把每个服务最新加载到 Docker 的镜像自动标记为 `latest`。
 
 ## 上传到服务器
 
@@ -128,7 +130,7 @@ ops/migrate-db.sh up
 
 ## 日常更新流程
 
-已有服务器更新代码包时，通常只需要换部署目录、加载新镜像、重建应用容器。不要重复执行 `bootstrap`，也不需要重复申请证书。
+已有服务器更新代码包时，通常只需要覆盖 `images/` 目录、加载新镜像、重建应用容器。不要重复执行 `bootstrap`，也不需要重复申请证书。
 
 ```bash
 cd /aeon/aeonblight-server

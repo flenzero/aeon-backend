@@ -100,6 +100,13 @@ func (s *PostgresStore) CommitAdminLotteryPreview(req AdminLotteryCommit) (Admin
 		if err := s.applyAdminRewardsTx(ctx, tx, accountID, grant, "admin_lottery_commit"); err != nil {
 			return AdminRewardGrantResult{}, err
 		}
+		announcements, err := s.publishRareRewardAnnouncementsTx(ctx, tx, DungeonRewardPlan{Items: scopedAdminRewardItems(plan.Items, characterID)}, rareAnnouncementContext{
+			AccountID: accountID, CharacterID: characterID, Source: "管理员代抽",
+			RefType: "admin_lottery", RefID: req.PreviewID, CreatedBy: req.AdminID, AnnouncementOn: true,
+		})
+		if err != nil {
+			return AdminRewardGrantResult{}, err
+		}
 		if _, err := tx.Exec(ctx, `UPDATE admin_operation_previews SET status='COMMITTED',committed_at=NOW() WHERE preview_id=$1`, req.PreviewID); err != nil {
 			return AdminRewardGrantResult{}, err
 		}
@@ -107,6 +114,6 @@ func (s *PostgresStore) CommitAdminLotteryPreview(req AdminLotteryCommit) (Admin
 		if err != nil {
 			return AdminRewardGrantResult{}, err
 		}
-		return AdminRewardGrantResult{Snapshot: snapshot}, nil
+		return AdminRewardGrantResult{Snapshot: snapshot, Announcements: announcements}, nil
 	})
 }

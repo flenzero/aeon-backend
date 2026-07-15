@@ -52,7 +52,7 @@ fi
 
 if ! docker image inspect "$migrator_image" >/dev/null 2>&1; then
   echo "missing Docker image: $migrator_image" >&2
-  echo "run ops/load-images.sh first, or set IMAGE_TAG in .env to a tag listed in RELEASE.txt" >&2
+  echo "run ops/load-images.sh first, or set IMAGE_TAG in .env to a loaded image tag" >&2
   exit 2
 fi
 

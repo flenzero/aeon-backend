@@ -72,11 +72,19 @@ server {
         proxy_pass http://aeon_economy_api;
     }
 
+    location ^~ /api/announcements/ {
+        proxy_pass http://aeon_economy_api;
+    }
+
     location ^~ /api/chain/ {
         proxy_pass http://aeon_economy_api;
     }
 
     location ^~ /api/auth/ {
+        proxy_pass http://aeon_account_api;
+    }
+
+    location ^~ /api/public/ {
         proxy_pass http://aeon_account_api;
     }
 

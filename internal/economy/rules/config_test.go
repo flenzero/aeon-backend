@@ -72,6 +72,9 @@ func TestLoadDirBuildsLiveEquipmentAndOperationsConfiguration(t *testing.T) {
 	if len(cfg.Equipment.ByItemID) != 70 {
 		t.Fatalf("equipment templates = %d, want 70", len(cfg.Equipment.ByItemID))
 	}
+	if cfg.Shops == nil || len(cfg.Shops) != 0 {
+		t.Fatalf("default shops should be configured but empty: %+v", cfg.Shops)
+	}
 	axe, ok := cfg.EquipmentTemplate("ashbound_axe_t1")
 	if !ok {
 		t.Fatal("ashbound axe template missing")

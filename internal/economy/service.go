@@ -169,6 +169,165 @@ func (s *Service) PurgeExpiredNPCRecycledEquipment(now time.Time, limit int) (in
 	return s.store.PurgeExpiredNPCRecycledEquipment(now, limit)
 }
 
+func (s *Service) ShopBuy(opID string, accountID, characterID int64, shopID, itemID string, quantity int64) (store.ShopBuyResult, error) {
+	if s.rulesErr != nil {
+		return store.ShopBuyResult{}, s.rulesErr
+	}
+	shop, ok := s.economyRules.Shop(shopID)
+	if !ok {
+		return store.ShopBuyResult{}, errors.New("shop does not exist")
+	}
+	item, ok := s.economyRules.Items[strings.TrimSpace(itemID)]
+	if !ok {
+		return store.ShopBuyResult{}, errors.New("item does not exist")
+	}
+	if !shop.SellsItem(item.ItemID) {
+		return store.ShopBuyResult{}, errors.New("item is not sold by this shop")
+	}
+	if quantity <= 0 {
+		return store.ShopBuyResult{}, errors.New("quantity must be positive")
+	}
+	if item.BuyPrice <= 0 {
+		return store.ShopBuyResult{}, errors.New("buy price is not configured")
+	}
+	plan, err := s.economyRules.ShopPurchasePlan(opID, characterID, item.ItemID, quantity)
+	if err != nil {
+		return store.ShopBuyResult{}, err
+	}
+	req := store.ShopBuyRequest{
+		OpID:        opID,
+		AccountID:   accountID,
+		CharacterID: characterID,
+		ShopID:      strings.TrimSpace(shopID),
+		ItemID:      item.ItemID,
+		Quantity:    quantity,
+		RewardPlan:  plan,
+		GrantGold:   item.GrantGold * quantity,
+		ConfigSnapshot: map[string]any{
+			"shopId":      strings.TrimSpace(shopID),
+			"itemId":      item.ItemID,
+			"quantity":    quantity,
+			"unitPrice":   item.BuyPrice,
+			"buyCurrency": item.BuyCurrency,
+		},
+	}
+	if item.BuyCurrency == 1 {
+		req.TokenCost = item.BuyPrice * quantity
+		req.ReceiverWallet = strings.TrimSpace(s.cfg.SolanaDepositWallet)
+		return s.store.CreateShopBuyPayment(req)
+	}
+	req.GoldCost = item.BuyPrice * quantity
+	result, err := s.store.ShopBuyGold(req)
+	if err != nil {
+		return store.ShopBuyResult{}, err
+	}
+	result.Snapshot, err = s.resolveSnapshot(result.Snapshot)
+	if err != nil {
+		return store.ShopBuyResult{}, err
+	}
+	return result, nil
+}
+
+func (s *Service) ShopSell(opID string, accountID, characterID int64, shopID string, slotIndex int, quantity int64, equipmentUID string) (store.ShopSellResult, error) {
+	if s.rulesErr != nil {
+		return store.ShopSellResult{}, s.rulesErr
+	}
+	if _, ok := s.economyRules.Shop(shopID); !ok {
+		return store.ShopSellResult{}, errors.New("shop does not exist")
+	}
+	if strings.TrimSpace(equipmentUID) != "" {
+		return s.shopSellEquipment(opID, accountID, characterID, shopID, equipmentUID)
+	}
+	if slotIndex < 0 {
+		return store.ShopSellResult{}, errors.New("slotIndex is required")
+	}
+	if quantity <= 0 {
+		return store.ShopSellResult{}, errors.New("quantity must be positive")
+	}
+	snapshot, err := s.store.EconomySnapshot(accountID, characterID)
+	if err != nil {
+		return store.ShopSellResult{}, err
+	}
+	var inventory *store.InventoryItem
+	for index := range snapshot.Inventory {
+		if snapshot.Inventory[index].Slot == slotIndex {
+			inventory = &snapshot.Inventory[index]
+			break
+		}
+	}
+	if inventory == nil {
+		return store.ShopSellResult{}, store.ErrNotFound
+	}
+	item, ok := s.economyRules.Items[inventory.ItemID]
+	if !ok {
+		return store.ShopSellResult{}, errors.New("item is not configured")
+	}
+	if item.SellPrice <= 0 {
+		return store.ShopSellResult{}, errors.New("sell price is not configured")
+	}
+	result, err := s.store.ShopSell(store.ShopSellRequest{
+		OpID:        opID,
+		AccountID:   accountID,
+		CharacterID: characterID,
+		ShopID:      strings.TrimSpace(shopID),
+		SlotIndex:   slotIndex,
+		Quantity:    quantity,
+		GoldCredit:  item.SellPrice * quantity,
+	})
+	if err != nil {
+		return store.ShopSellResult{}, err
+	}
+	result.Snapshot, err = s.resolveSnapshot(result.Snapshot)
+	if err != nil {
+		return store.ShopSellResult{}, err
+	}
+	return result, nil
+}
+
+func (s *Service) shopSellEquipment(opID string, accountID, characterID int64, shopID, equipmentUID string) (store.ShopSellResult, error) {
+	snapshot, err := s.store.EconomySnapshot(accountID, characterID)
+	if err != nil {
+		return store.ShopSellResult{}, err
+	}
+	var equipment *store.EquipmentItem
+	for index := range snapshot.Equipment {
+		if snapshot.Equipment[index].EquipmentUID == strings.TrimSpace(equipmentUID) {
+			equipment = &snapshot.Equipment[index]
+			break
+		}
+	}
+	if equipment == nil || equipment.Status != "IN_BAG" {
+		return store.ShopSellResult{}, store.ErrNotFound
+	}
+	if equipment.NFTContract != nil {
+		return store.ShopSellResult{}, errors.New("nft-linked equipment cannot be sold to a shop")
+	}
+	item, ok := s.economyRules.Items[equipment.ItemID]
+	if !ok {
+		return store.ShopSellResult{}, errors.New("equipment item is not configured")
+	}
+	if item.SellPrice <= 0 {
+		return store.ShopSellResult{}, errors.New("sell price is not configured")
+	}
+	result, err := s.store.ShopSell(store.ShopSellRequest{
+		OpID:         opID,
+		AccountID:    accountID,
+		CharacterID:  characterID,
+		ShopID:       strings.TrimSpace(shopID),
+		EquipmentUID: strings.TrimSpace(equipmentUID),
+		Quantity:     1,
+		GoldCredit:   item.SellPrice,
+	})
+	if err != nil {
+		return store.ShopSellResult{}, err
+	}
+	result.Snapshot, err = s.resolveSnapshot(result.Snapshot)
+	if err != nil {
+		return store.ShopSellResult{}, err
+	}
+	return result, nil
+}
+
 func (s *Service) RequestNFTMint(req store.NFTMintRequestInput) (store.NFTMintRequestResult, error) {
 	if s.rulesErr != nil {
 		return store.NFTMintRequestResult{}, s.rulesErr

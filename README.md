@@ -119,9 +119,9 @@ Implemented first:
 
 ```text
 WebGL / launcher
-  -> account-api (wallet login, JWT, launch ticket, sessions)
+  -> account-api (wallet login, JWT, public server list, launch ticket, sessions)
 Game servers
-  -> account-api (consume ticket, online enter/heartbeat)
+  -> account-api (consume ticket, character-bound online enter/heartbeat)
   -> economy-api (snapshot, inventory, marketplace, chain payments)
 economy-worker
   -> economy-api internal jobs
@@ -153,7 +153,7 @@ path and must be empty in staging/production.
 ## Dungeon reconnect recovery
 
 `GET /api/game/dungeon/recovery?characterId=...` is called with the player's JWT
-when entering the home screen. A `STARTED` dungeon returns `required=true` plus
+after the game client has selected a character. A `STARTED` dungeon returns `required=true` plus
 its `dungeonRunId` and original `serverId`. Redis keeps the hot recovery hint,
 while PostgreSQL confirms the run is still active so stale Redis data cannot
 resurrect a finished run.
@@ -166,8 +166,10 @@ accepts `action=resume|abandon`:
 - `abandon` atomically changes the run to `CANCELLED`, invalidates outstanding
   resume tickets, clears the Redis hint and grants no experience, loot or AEB.
 
-Until the run is finished or abandoned, ordinary launch into a different server
-is rejected. A character can have at most one `STARTED` dungeon.
+Home-page launch tickets are account-level and server-bound; they do not carry a
+character. A character can have at most one `STARTED` dungeon, and recovery
+decisions after character selection still force reconnect to the origin server
+or explicit abandon.
 
 Still intentionally stubbed / next:
 

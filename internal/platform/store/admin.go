@@ -241,19 +241,22 @@ type AdminOperation struct {
 // Items and Equipment are placed into the Loot Tray so no existing inventory
 // capacity is displaced by an administrator action.
 type AdminRewardGrant struct {
-	OpID            string
-	AdminID         string
-	CharacterID     int64
-	Reason          string
-	Gold            int64
-	WithdrawableAEB int64
-	LockedAEB       int64
-	Items           []DungeonRewardGrant
+	OpID               string
+	AdminID            string
+	CharacterID        int64
+	Reason             string
+	AnnounceRare       bool
+	AnnouncementSource string
+	Gold               int64
+	WithdrawableAEB    int64
+	LockedAEB          int64
+	Items              []DungeonRewardGrant
 }
 
 type AdminRewardGrantResult struct {
-	Snapshot EconomySnapshot       `json:"snapshot"`
-	Items    appliedDungeonRewards `json:"items"`
+	Snapshot      EconomySnapshot       `json:"snapshot"`
+	Items         appliedDungeonRewards `json:"items"`
+	Announcements []Announcement        `json:"announcements,omitempty"`
 }
 
 func clampAdminLimit(limit int) int {
@@ -307,6 +310,9 @@ func (s *PostgresStore) AdminGrantRewards(req AdminRewardGrant) (AdminRewardGran
 	}
 	if req.Gold < 0 || req.WithdrawableAEB < 0 || req.LockedAEB < 0 {
 		return AdminRewardGrantResult{}, errors.New("reward amounts must be non-negative")
+	}
+	if req.AnnounceRare && strings.TrimSpace(req.AnnouncementSource) == "" {
+		return AdminRewardGrantResult{}, errors.New("announcementSource is required when announceRare is true")
 	}
 	if req.Gold == 0 && req.WithdrawableAEB == 0 && req.LockedAEB == 0 && len(req.Items) == 0 {
 		return AdminRewardGrantResult{}, errors.New("at least one reward is required")
@@ -370,6 +376,13 @@ func (s *PostgresStore) AdminGrantRewards(req AdminRewardGrant) (AdminRewardGran
 				return AdminRewardGrantResult{}, err
 			}
 		}
+		announcements, err := s.publishRareRewardAnnouncementsTx(ctx, tx, DungeonRewardPlan{Items: req.Items}, rareAnnouncementContext{
+			AccountID: accountID, CharacterID: req.CharacterID, Source: req.AnnouncementSource,
+			RefType: "admin_grant", RefID: req.OpID, CreatedBy: req.AdminID, AnnouncementOn: req.AnnounceRare,
+		})
+		if err != nil {
+			return AdminRewardGrantResult{}, err
+		}
 		if _, err := tx.Exec(ctx, `
 			INSERT INTO admin_audit_logs (admin_id, action, target_type, target_id, reason)
 			VALUES ($1, 'admin_reward_grant', 'character', $2, $3)
@@ -380,7 +393,7 @@ func (s *PostgresStore) AdminGrantRewards(req AdminRewardGrant) (AdminRewardGran
 		if err != nil {
 			return AdminRewardGrantResult{}, err
 		}
-		return AdminRewardGrantResult{Snapshot: snapshot, Items: items}, nil
+		return AdminRewardGrantResult{Snapshot: snapshot, Items: items, Announcements: announcements}, nil
 	})
 }
 

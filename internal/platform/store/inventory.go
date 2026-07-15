@@ -158,6 +158,12 @@ func (s *PostgresStore) Synthesize(req SynthesizeRequest) (EconomySnapshot, erro
 		if err != nil {
 			return EconomySnapshot{}, err
 		}
+		if _, err := s.publishRareRewardAnnouncementsTx(ctx, tx, req.RewardPlan, rareAnnouncementContext{
+			AccountID: req.AccountID, CharacterID: req.CharacterID, Source: "合成",
+			RefType: "recipe", RefID: req.RecipeID, AnnouncementOn: true,
+		}); err != nil {
+			return EconomySnapshot{}, err
+		}
 		if err := s.insertEconomyLedger(ctx, tx, req.AccountID, req.CharacterID, "INVENTORY_SYNTHESIZED", req.RecipeID, int64(len(rewards.Items)+len(rewards.EquipmentItems)), req.OpID); err != nil {
 			return EconomySnapshot{}, err
 		}

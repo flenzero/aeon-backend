@@ -14,6 +14,7 @@ import (
 type opsRewardItem struct {
 	ItemID   string `json:"itemId"`
 	Quantity int64  `json:"quantity"`
+	Rarity   int    `json:"rarity"`
 }
 
 func (h *Handler) opsCharacterID(w http.ResponseWriter, r *http.Request) (int64, bool) {
@@ -46,6 +47,12 @@ func (h *Handler) configuredRewardPlan(opID string, items []opsRewardItem) (stor
 			if item.Quantity != 1 {
 				return store.DungeonRewardPlan{}, fmt.Errorf("equipment %q quantity must be 1", itemID)
 			}
+			if item.Rarity > 0 {
+				if _, ok := h.rules.EquipmentRarity(item.Rarity); !ok {
+					return store.DungeonRewardPlan{}, fmt.Errorf("items[%d] rarity is not configured", index)
+				}
+				reward.Rarity = item.Rarity
+			}
 			reward.RewardType = "equipment"
 			reward.EquipmentUID = fmt.Sprintf("admin-%s-%d", strings.TrimSpace(opID), index)
 		}
@@ -57,10 +64,12 @@ func (h *Handler) configuredRewardPlan(opID string, items []opsRewardItem) (stor
 func (h *Handler) grantOpsRewards(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		serverOperation
-		Gold            int64           `json:"gold"`
-		WithdrawableAEB int64           `json:"withdrawableAeb"`
-		LockedAEB       int64           `json:"lockedAeb"`
-		Items           []opsRewardItem `json:"items"`
+		Gold               int64           `json:"gold"`
+		WithdrawableAEB    int64           `json:"withdrawableAeb"`
+		LockedAEB          int64           `json:"lockedAeb"`
+		Items              []opsRewardItem `json:"items"`
+		AnnounceRare       bool            `json:"announceRare"`
+		AnnouncementSource string          `json:"announcementSource"`
 	}
 	if !httpx.Decode(r, &body) {
 		httpx.Error(w, http.StatusBadRequest, 400, "invalid JSON body")
@@ -81,6 +90,7 @@ func (h *Handler) grantOpsRewards(w http.ResponseWriter, r *http.Request) {
 	result, err := h.store.AdminGrantRewards(store.AdminRewardGrant{
 		OpID: body.OpID, AdminID: authenticatedAdminID(r), CharacterID: characterID, Reason: body.Reason,
 		Gold: body.Gold, WithdrawableAEB: body.WithdrawableAEB, LockedAEB: body.LockedAEB, Items: plan.Items,
+		AnnounceRare: body.AnnounceRare, AnnouncementSource: body.AnnouncementSource,
 	})
 	if err != nil {
 		writeStoreErr(w, err)

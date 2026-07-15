@@ -2,9 +2,10 @@
 
 ## Purpose
 
-Own wallet identity, sessions, characters, game-server registration, launch
-tickets, and online presence. After login, the WebGL client receives a
-short-lived launch ticket; game servers consume it through an internal route.
+Own wallet identity, sessions, public server selection, characters, game-server
+registration, launch tickets, and online presence. After wallet login, the home
+page receives an account-level, server-bound launch ticket; game servers consume
+it through an internal route before the client chooses a Character.
 
 ## Canonical terms
 
@@ -14,9 +15,10 @@ short-lived launch ticket; game servers consume it through an internal route.
 - **Game Server** — a gameplay partition, not a separate economy.
 - **Service Identity** — one super-admin-approved Ed25519 public identity for a
   machine caller, with explicit capabilities and revocable status.
-- **Launch Ticket** — short-lived, one-time admission proof for a Character.
+- **Launch Ticket** — short-lived, one-time admission proof for an Account and
+  one Game Server.
 - **Online Presence** — the current Game Server connection for an Account.
-- **Dungeon Recovery** — the home-screen decision that either issues an
+- **Dungeon Recovery** — the post-selection decision that either issues an
   origin-server-only Launch Ticket or cancels an unfinished Dungeon Run without rewards.
 
 ## Runtime

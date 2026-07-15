@@ -61,6 +61,12 @@ func (s *PostgresStore) fulfillLotteryPaymentTx(ctx context.Context, tx pgx.Tx, 
 	if err := json.Unmarshal(raw, &payload); err != nil {
 		return err
 	}
-	_, err := s.applyTrayRewards(ctx, tx, order.AccountID, order.CharacterID, order.ID, order.ID, "lottery", "lottery_reward", payload.RewardPlan)
+	if _, err := s.applyTrayRewards(ctx, tx, order.AccountID, order.CharacterID, order.ID, order.ID, "lottery", "lottery_reward", payload.RewardPlan); err != nil {
+		return err
+	}
+	_, err := s.publishRareRewardAnnouncementsTx(ctx, tx, payload.RewardPlan, rareAnnouncementContext{
+		AccountID: order.AccountID, CharacterID: order.CharacterID, Source: "抽奖",
+		RefType: "lottery_order", RefID: order.ID, AnnouncementOn: true,
+	})
 	return err
 }

@@ -57,15 +57,6 @@ aeon_load_env() {
   set +a
 }
 
-aeon_release_value() {
-  local key="$1"
-  local release_file="$AEON_ROOT/RELEASE.txt"
-  if [[ ! -f "$release_file" ]]; then
-    return 1
-  fi
-  awk -F= -v key="$key" '$1 == key {print $2; exit}' "$release_file"
-}
-
 aeon_image_exists() {
   docker image inspect "$1" >/dev/null 2>&1
 }
@@ -73,23 +64,14 @@ aeon_image_exists() {
 aeon_resolve_image_tag() {
   local image_name="$1"
   local requested_tag="${2:-}"
-  local release_tag
 
   if [[ -n "$requested_tag" ]] && aeon_image_exists "$image_name:$requested_tag"; then
     printf '%s\n' "$requested_tag"
     return 0
   fi
 
-  release_tag="$(aeon_release_value image_tag || true)"
-  if [[ -n "$release_tag" ]] && aeon_image_exists "$image_name:$release_tag"; then
-    printf '%s\n' "$release_tag"
-    return 0
-  fi
-
   if [[ -n "$requested_tag" ]]; then
     printf '%s\n' "$requested_tag"
-  elif [[ -n "$release_tag" ]]; then
-    printf '%s\n' "$release_tag"
   else
     printf 'latest\n'
   fi

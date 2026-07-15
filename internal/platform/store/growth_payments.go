@@ -15,6 +15,7 @@ const (
 	PaymentPurposeBagExpand            = "BAG_EXPAND"
 	PaymentPurposeTradingLicense       = "TRADING_LICENSE"
 	PaymentPurposeLotteryDraw          = "LOTTERY_DRAW"
+	PaymentPurposeShopBuy              = "SHOP_BUY"
 	PaymentPurposeBountySlotUnlock     = "BOUNTY_SLOT_UNLOCK"
 	PaymentPurposeBountyPremiumRefresh = "BOUNTY_PREMIUM_REFRESH"
 )
@@ -79,7 +80,7 @@ type GrowthPaymentResult struct {
 
 func supportedPaymentPurpose(purpose string) bool {
 	switch purpose {
-	case PaymentPurposeWalletExpand, PaymentPurposeBagExpand, PaymentPurposeTradingLicense, PaymentPurposeLotteryDraw, PaymentPurposeBountySlotUnlock, PaymentPurposeBountyPremiumRefresh:
+	case PaymentPurposeWalletExpand, PaymentPurposeBagExpand, PaymentPurposeTradingLicense, PaymentPurposeLotteryDraw, PaymentPurposeShopBuy, PaymentPurposeBountySlotUnlock, PaymentPurposeBountyPremiumRefresh:
 		return true
 	default:
 		return false
