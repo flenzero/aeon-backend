@@ -324,23 +324,53 @@ type EconomySnapshot struct {
 }
 
 type ShopBuyRequest struct {
-	OpID           string
-	AccountID      int64
-	CharacterID    int64
-	ShopID         string
-	ItemID         string
-	Quantity       int64
-	GoldCost       int64
-	TokenCost      int64
-	ReceiverWallet string
-	GrantGold      int64
-	RewardPlan     DungeonRewardPlan
-	ConfigSnapshot any
+	OpID             string
+	AccountID        int64
+	CharacterID      int64
+	ShopID           string
+	ItemID           string
+	Quantity         int64
+	MysterySlotIndex int
+	ShopSlotIndex    int
+	ShopDailyLimit   int64
+	ShopBusinessDate string
+	GoldCost         int64
+	TokenCost        int64
+	ReceiverWallet   string
+	GrantGold        int64
+	RewardPlan       DungeonRewardPlan
+	ConfigSnapshot   any
 }
 
 type ShopBuyResult struct {
 	Order    PaymentOrder    `json:"order,omitempty"`
 	Snapshot EconomySnapshot `json:"snapshot,omitempty"`
+}
+
+type ShopCatalog struct {
+	ShopID         string            `json:"shopId"`
+	DisplayName    string            `json:"displayName"`
+	CharacterID    int64             `json:"characterId"`
+	CharacterLevel int               `json:"characterLevel"`
+	BusinessDate   string            `json:"businessDate"`
+	NextResetAt    time.Time         `json:"nextResetAt"`
+	Items          []ShopCatalogItem `json:"items"`
+}
+
+type ShopCatalogItem struct {
+	SlotIndex      int    `json:"slotIndex"`
+	ItemID         string `json:"itemId"`
+	DisplayName    string `json:"displayName"`
+	Quantity       int64  `json:"quantity"`
+	Rarity         int    `json:"rarity,omitempty"`
+	BuyCurrency    int    `json:"buyCurrency"`
+	BuyPrice       int64  `json:"buyPrice"`
+	MinLevel       int    `json:"minLevel,omitempty"`
+	MaxLevel       int    `json:"maxLevel,omitempty"`
+	DailyLimit     int64  `json:"dailyLimit"`
+	PurchasedToday int64  `json:"purchasedToday"`
+	RemainingToday int64  `json:"remainingToday"`
+	Available      bool   `json:"available"`
 }
 
 type ShopSellRequest struct {
@@ -356,6 +386,50 @@ type ShopSellRequest struct {
 
 type ShopSellResult struct {
 	Snapshot EconomySnapshot `json:"snapshot"`
+}
+
+type MysteryShopBoard struct {
+	ShopID                     string             `json:"shopId"`
+	CharacterID                int64              `json:"characterId"`
+	CharacterLevel             int                `json:"characterLevel"`
+	UnlockedSlots              int                `json:"unlockedSlots"`
+	MaxSlots                   int                `json:"maxSlots"`
+	NextManualRefreshTokenCost int64              `json:"nextManualRefreshTokenCost"`
+	SoldOut                    bool               `json:"soldOut"`
+	NextFreeRefreshAt          time.Time          `json:"nextFreeRefreshAt"`
+	FreeRefreshAvailable       bool               `json:"freeRefreshAvailable"`
+	GeneratedAt                time.Time          `json:"generatedAt"`
+	Offers                     []MysteryShopOffer `json:"offers"`
+}
+
+type MysteryShopOffer struct {
+	SlotIndex   int    `json:"slotIndex"`
+	ItemID      string `json:"itemId"`
+	Quantity    int64  `json:"quantity"`
+	Rarity      int    `json:"rarity,omitempty"`
+	GoldPrice   int64  `json:"goldPrice,omitempty"`
+	TokenPrice  int64  `json:"tokenPrice,omitempty"`
+	DiscountBps int    `json:"discountBps"`
+	Purchased   bool   `json:"purchased"`
+}
+
+type MysteryShopBoardState struct {
+	ShopID            string             `json:"shopId"`
+	CharacterID       int64              `json:"characterId"`
+	NextFreeRefreshAt time.Time          `json:"nextFreeRefreshAt"`
+	GeneratedAt       time.Time          `json:"generatedAt"`
+	Offers            []MysteryShopOffer `json:"offers"`
+}
+
+type MysteryShopRefreshRequest struct {
+	OpID              string
+	AccountID         int64
+	CharacterID       int64
+	ShopID            string
+	TokenCost         int64
+	NextFreeRefreshAt time.Time
+	GeneratedAt       time.Time
+	Offers            []MysteryShopOffer
 }
 
 type ClearProgressLeaderboard struct {
@@ -416,6 +490,8 @@ type EquipmentItem struct {
 	Status        string           `json:"status"`
 	EquipSlot     int              `json:"equipSlot"`
 	Slot          int              `json:"slot"`
+	WeaponType    int              `json:"weaponType"`
+	WeaponTypeKey string           `json:"weaponTypeKey"`
 	NFTContract   *string          `json:"nftContract"`
 	NFTTokenID    *string          `json:"nftTokenId"`
 	NFTStatus     *string          `json:"nftStatus,omitempty"`
@@ -497,6 +573,7 @@ type Store struct {
 	serviceIdentities     map[string]*ServiceIdentity
 	serviceNonces         map[string]time.Time
 	dungeonRecoveries     map[int64]*DungeonRunRecovery
+	mysteryShops          map[string]*MysteryShopBoardState
 }
 
 var Default = New()
@@ -523,6 +600,7 @@ func New() *Store {
 		serviceIdentities: map[string]*ServiceIdentity{},
 		serviceNonces:     map[string]time.Time{},
 		dungeonRecoveries: map[int64]*DungeonRunRecovery{},
+		mysteryShops:      map[string]*MysteryShopBoardState{},
 	}
 }
 
@@ -1251,11 +1329,30 @@ func (s *Store) EconomySnapshot(accountID, characterID int64) (EconomySnapshot, 
 }
 
 func (s *Store) ShopBuyGold(req ShopBuyRequest) (ShopBuyResult, error) {
+	if req.ShopSlotIndex > 0 && req.ShopDailyLimit > 0 && req.Quantity > req.ShopDailyLimit {
+		return ShopBuyResult{}, errors.New("shop daily purchase limit reached")
+	}
+	if req.MysterySlotIndex > 0 {
+		s.mu.Lock()
+		if state, ok := s.mysteryShops[mysteryShopKey(req.CharacterID, req.ShopID)]; ok {
+			for index := range state.Offers {
+				if state.Offers[index].SlotIndex == req.MysterySlotIndex {
+					state.Offers[index].Purchased = true
+					break
+				}
+			}
+		}
+		s.mu.Unlock()
+	}
 	snapshot, err := s.EconomySnapshot(req.AccountID, req.CharacterID)
 	if err != nil {
 		return ShopBuyResult{}, err
 	}
 	return ShopBuyResult{Snapshot: snapshot}, nil
+}
+
+func (s *Store) ShopDailyPurchaseQuantities(accountID, characterID int64, shopID, businessDate string) (map[int]int64, error) {
+	return map[int]int64{}, nil
 }
 
 func (s *Store) CreateShopBuyPayment(req ShopBuyRequest) (ShopBuyResult, error) {
@@ -1268,6 +1365,46 @@ func (s *Store) ShopSell(req ShopSellRequest) (ShopSellResult, error) {
 		return ShopSellResult{}, err
 	}
 	return ShopSellResult{Snapshot: snapshot}, nil
+}
+
+func (s *Store) MysteryShopBoard(accountID, characterID int64, shopID string) (MysteryShopBoardState, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	character, ok := s.characters[characterID]
+	if !ok || character.AccountID != accountID || character.Deleted {
+		return MysteryShopBoardState{}, ErrNotFound
+	}
+	key := mysteryShopKey(characterID, shopID)
+	if row, ok := s.mysteryShops[key]; ok {
+		return *row, nil
+	}
+	return MysteryShopBoardState{}, ErrNotFound
+}
+
+func (s *Store) MysteryShopPaidRefreshCount(accountID, characterID int64, shopID string, dayStart, dayEnd time.Time) (int, error) {
+	return 0, nil
+}
+
+func (s *Store) RefreshMysteryShop(req MysteryShopRefreshRequest) (MysteryShopBoardState, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	character, ok := s.characters[req.CharacterID]
+	if !ok || character.AccountID != req.AccountID || character.Deleted {
+		return MysteryShopBoardState{}, ErrNotFound
+	}
+	state := MysteryShopBoardState{
+		ShopID:            strings.TrimSpace(req.ShopID),
+		CharacterID:       req.CharacterID,
+		NextFreeRefreshAt: req.NextFreeRefreshAt,
+		GeneratedAt:       req.GeneratedAt,
+		Offers:            append([]MysteryShopOffer(nil), req.Offers...),
+	}
+	s.mysteryShops[mysteryShopKey(req.CharacterID, req.ShopID)] = &state
+	return state, nil
+}
+
+func mysteryShopKey(characterID int64, shopID string) string {
+	return strconv.FormatInt(characterID, 10) + ":" + strings.TrimSpace(shopID)
 }
 
 func (s *Store) WarehouseDeposit(req EconomyActionRequest) (EconomySnapshot, error) {

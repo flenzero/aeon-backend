@@ -69,6 +69,9 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("POST /api/economy/equipment/repair", gameplay(h.equipmentRepair))
 	mux.HandleFunc("POST /api/economy/equipment/enhance", gameplay(h.equipmentEnhance))
 	mux.HandleFunc("POST /api/economy/equipment/npc-recycle", gameplay(h.equipmentNPCRecycle))
+	mux.HandleFunc("GET /api/economy/shop/catalog", gameplay(h.shopCatalog))
+	mux.HandleFunc("GET /api/economy/shop/mystery", gameplay(h.mysteryShopBoard))
+	mux.HandleFunc("POST /api/economy/shop/mystery/refresh", gameplay(h.mysteryShopRefresh))
 	mux.HandleFunc("POST /api/economy/shop/buy", gameplay(h.shopBuy))
 	mux.HandleFunc("POST /api/economy/shop/sell", gameplay(h.shopSell))
 	mux.HandleFunc("POST /api/economy/lottery/draw", gameplay(h.lotteryDraw))
@@ -410,6 +413,85 @@ func (h *Handler) shopBuy(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	result, err := h.service.ShopBuy(body.OpID, accountID, body.CharacterID, body.ShopID, body.ItemID, body.Quantity)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 3000, err.Error())
+		return
+	}
+	httpx.OK(w, result)
+}
+
+func (h *Handler) shopCatalog(w http.ResponseWriter, r *http.Request) {
+	accountID, err := httpx.AccountID(r)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 2006, err.Error())
+		return
+	}
+	characterID, err := httpx.CharacterID(r)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 2007, err.Error())
+		return
+	}
+	shopID := strings.TrimSpace(r.URL.Query().Get("shopId"))
+	if shopID == "" {
+		shopID = "general_merchant"
+	}
+	result, err := h.service.ShopCatalog(accountID, characterID, shopID, time.Now().UTC())
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 3000, err.Error())
+		return
+	}
+	httpx.OK(w, result)
+}
+
+func (h *Handler) mysteryShopBoard(w http.ResponseWriter, r *http.Request) {
+	accountID, err := httpx.AccountID(r)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 2006, err.Error())
+		return
+	}
+	characterID, err := httpx.CharacterID(r)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 2007, err.Error())
+		return
+	}
+	shopID := strings.TrimSpace(r.URL.Query().Get("shopId"))
+	if shopID == "" {
+		shopID = "mystery_merchant"
+	}
+	result, err := h.service.MysteryShopBoard(accountID, characterID, shopID, time.Now().UTC())
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 3000, err.Error())
+		return
+	}
+	httpx.OK(w, result)
+}
+
+func (h *Handler) mysteryShopRefresh(w http.ResponseWriter, r *http.Request) {
+	accountID, err := httpx.AccountID(r)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 2006, err.Error())
+		return
+	}
+	var body struct {
+		OpID        string `json:"opId"`
+		CharacterID int64  `json:"characterId"`
+		ShopID      string `json:"shopId"`
+	}
+	if !httpx.Decode(r, &body) {
+		httpx.Error(w, http.StatusBadRequest, 400, "invalid JSON body")
+		return
+	}
+	if body.CharacterID == 0 {
+		body.CharacterID, err = httpx.CharacterID(r)
+		if err != nil {
+			httpx.Error(w, http.StatusBadRequest, 2007, err.Error())
+			return
+		}
+	}
+	if strings.TrimSpace(body.ShopID) == "" {
+		body.ShopID = "mystery_merchant"
+	}
+	result, err := h.service.RefreshMysteryShop(body.OpID, accountID, body.CharacterID, body.ShopID, time.Now().UTC())
 	if err != nil {
 		httpx.Error(w, http.StatusBadRequest, 3000, err.Error())
 		return

@@ -26,9 +26,14 @@ Files:
 
 ## Shops
 
-`shops.json` is intentionally empty by default. A shop becomes usable only when
-it contains a `shopId` and either `sellAllItems=true` or the requested `itemId`
-is present in `sellItems`.
+`shops.json` defines merchant inventories. A normal shop becomes usable only
+when it contains a `shopId` and either `sellAllItems=true` or the requested
+`itemId` is present in `sellItems`.
+
+Normal merchant `sellItems` should use object rows with `slotIndex` and
+`dailyLimit`; purchases are limited per character, shop, slot, and business
+date. `dailyLimitTimezone` defaults to `Asia/Shanghai`. `buyPrice`, `rarity`,
+`minLevel`, and `maxLevel` can be overridden per shop row.
 
 Prices live on `items.json` rows:
 
@@ -38,6 +43,37 @@ Prices live on `items.json` rows:
   equipment to a shop; runtime sale rejects zero-priced rows.
 - `grantGold`: optional gold granted after purchase instead of creating an
   inventory/equipment item.
+
+## Equipment enums
+
+`equipment_templates.json` owns current equipment slots and weapon subtypes.
+`equipSlot` is the character equipment slot; `slot` in runtime responses is the
+bag/warehouse grid position.
+
+Equipment slot order follows the character UI from top to bottom, alternating
+left/right:
+
+| equipSlot | Key | UI position |
+| ---: | --- | --- |
+| -1 | none | not equipped |
+| 0 | weapon | left 1 |
+| 1 | helmet | right 1 |
+| 2 | chest | left 2 |
+| 3 | cloak | right 2 |
+| 4 | gloves | left 3 |
+| 5 | accessory | right 3 |
+| 6 | shoes | left 4 |
+| 7 | mount | right 4 |
+
+Weapon subtype values:
+
+| weaponType | weaponTypeKey |
+| ---: | --- |
+| 0 | none |
+| 1 | sword |
+| 2 | axe |
+| 3 | bow |
+| 4 | staff |
 
 ## Dungeons
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"hash/fnv"
+	"math/rand/v2"
 	"strings"
 	"time"
 
@@ -182,41 +183,110 @@ func (s *Service) ShopBuy(opID string, accountID, characterID int64, shopID, ite
 		return store.ShopBuyResult{}, errors.New("item does not exist")
 	}
 	if !shop.SellsItem(item.ItemID) {
-		return store.ShopBuyResult{}, errors.New("item is not sold by this shop")
+		if shop.Mystery == nil {
+			return store.ShopBuyResult{}, errors.New("item is not sold by this shop")
+		}
 	}
+	sellItem, soldByShop := shop.SellItem(item.ItemID)
 	if quantity <= 0 {
 		return store.ShopBuyResult{}, errors.New("quantity must be positive")
 	}
-	if item.BuyPrice <= 0 {
+	snapshot, err := s.store.EconomySnapshot(accountID, characterID)
+	if err != nil {
+		return store.ShopBuyResult{}, err
+	}
+	if soldByShop && shop.Mystery == nil {
+		if sellItem.MinLevel > 0 && snapshot.Level < sellItem.MinLevel {
+			return store.ShopBuyResult{}, errors.New("character level is too low for this shop item")
+		}
+		if sellItem.MaxLevel > 0 && snapshot.Level > sellItem.MaxLevel {
+			return store.ShopBuyResult{}, errors.New("character level is too high for this shop item")
+		}
+	}
+	buyCurrency := item.BuyCurrency
+	unitPrice := item.BuyPrice
+	totalPrice := item.BuyPrice * quantity
+	if soldByShop && sellItem.BuyPrice > 0 {
+		unitPrice = sellItem.BuyPrice
+		totalPrice = sellItem.BuyPrice * quantity
+	}
+	mysterySlotIndex := 0
+	var mysteryOffer *store.MysteryShopOffer
+	if shop.Mystery != nil {
+		offer, err := s.availableMysteryOffer(accountID, characterID, shop.ShopID, item.ItemID, quantity)
+		if err != nil {
+			return store.ShopBuyResult{}, err
+		}
+		mysteryOffer = &offer
+		mysterySlotIndex = offer.SlotIndex
+		if offer.TokenPrice > 0 {
+			buyCurrency = 1
+			unitPrice = offer.TokenPrice
+			totalPrice = offer.TokenPrice
+		} else {
+			buyCurrency = 0
+			unitPrice = offer.GoldPrice
+			totalPrice = offer.GoldPrice
+		}
+	}
+	if totalPrice <= 0 {
 		return store.ShopBuyResult{}, errors.New("buy price is not configured")
 	}
-	plan, err := s.economyRules.ShopPurchasePlan(opID, characterID, item.ItemID, quantity)
+	shopSlotIndex := 0
+	shopDailyLimit := int64(0)
+	shopBusinessDate := ""
+	if soldByShop && shop.Mystery == nil {
+		if sellItem.SlotIndex <= 0 || sellItem.DailyLimit <= 0 {
+			return store.ShopBuyResult{}, errors.New("shop item daily limit is not configured")
+		}
+		day, _, _, err := shopBusinessDay(time.Now().UTC(), shop.DailyLimitTimezone)
+		if err != nil {
+			return store.ShopBuyResult{}, err
+		}
+		shopSlotIndex = sellItem.SlotIndex
+		shopDailyLimit = sellItem.DailyLimit
+		shopBusinessDate = day
+	}
+	var plan store.DungeonRewardPlan
+	if mysteryOffer != nil {
+		plan, err = s.economyRules.MysteryShopPurchasePlan(opID, characterID, *mysteryOffer)
+	} else {
+		plan, err = s.economyRules.ShopPurchasePlan(opID, characterID, item.ItemID, quantity, sellItem.Rarity)
+	}
 	if err != nil {
 		return store.ShopBuyResult{}, err
 	}
 	req := store.ShopBuyRequest{
-		OpID:        opID,
-		AccountID:   accountID,
-		CharacterID: characterID,
-		ShopID:      strings.TrimSpace(shopID),
-		ItemID:      item.ItemID,
-		Quantity:    quantity,
-		RewardPlan:  plan,
-		GrantGold:   item.GrantGold * quantity,
+		OpID:             opID,
+		AccountID:        accountID,
+		CharacterID:      characterID,
+		ShopID:           strings.TrimSpace(shopID),
+		ItemID:           item.ItemID,
+		Quantity:         quantity,
+		MysterySlotIndex: mysterySlotIndex,
+		ShopSlotIndex:    shopSlotIndex,
+		ShopDailyLimit:   shopDailyLimit,
+		ShopBusinessDate: shopBusinessDate,
+		RewardPlan:       plan,
+		GrantGold:        item.GrantGold * quantity,
 		ConfigSnapshot: map[string]any{
-			"shopId":      strings.TrimSpace(shopID),
-			"itemId":      item.ItemID,
-			"quantity":    quantity,
-			"unitPrice":   item.BuyPrice,
-			"buyCurrency": item.BuyCurrency,
+			"shopId":           strings.TrimSpace(shopID),
+			"itemId":           item.ItemID,
+			"quantity":         quantity,
+			"unitPrice":        unitPrice,
+			"totalPrice":       totalPrice,
+			"buyCurrency":      buyCurrency,
+			"mysterySlotIndex": mysterySlotIndex,
+			"shopSlotIndex":    shopSlotIndex,
+			"shopBusinessDate": shopBusinessDate,
 		},
 	}
-	if item.BuyCurrency == 1 {
-		req.TokenCost = item.BuyPrice * quantity
+	if buyCurrency == 1 {
+		req.TokenCost = totalPrice
 		req.ReceiverWallet = strings.TrimSpace(s.cfg.SolanaDepositWallet)
 		return s.store.CreateShopBuyPayment(req)
 	}
-	req.GoldCost = item.BuyPrice * quantity
+	req.GoldCost = totalPrice
 	result, err := s.store.ShopBuyGold(req)
 	if err != nil {
 		return store.ShopBuyResult{}, err
@@ -226,6 +296,365 @@ func (s *Service) ShopBuy(opID string, accountID, characterID int64, shopID, ite
 		return store.ShopBuyResult{}, err
 	}
 	return result, nil
+}
+
+func (s *Service) ShopCatalog(accountID, characterID int64, shopID string, now time.Time) (store.ShopCatalog, error) {
+	if s.rulesErr != nil {
+		return store.ShopCatalog{}, s.rulesErr
+	}
+	shop, ok := s.economyRules.Shop(shopID)
+	if !ok {
+		return store.ShopCatalog{}, errors.New("shop does not exist")
+	}
+	if shop.Mystery != nil {
+		return store.ShopCatalog{}, errors.New("use mystery shop endpoint for this shop")
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	snapshot, err := s.store.EconomySnapshot(accountID, characterID)
+	if err != nil {
+		return store.ShopCatalog{}, err
+	}
+	businessDate, _, nextResetAt, err := shopBusinessDay(now, shop.DailyLimitTimezone)
+	if err != nil {
+		return store.ShopCatalog{}, err
+	}
+	purchased, err := s.store.ShopDailyPurchaseQuantities(accountID, characterID, shop.ShopID, businessDate)
+	if err != nil {
+		return store.ShopCatalog{}, err
+	}
+	out := store.ShopCatalog{
+		ShopID:         shop.ShopID,
+		DisplayName:    shop.DisplayName,
+		CharacterID:    characterID,
+		CharacterLevel: snapshot.Level,
+		BusinessDate:   businessDate,
+		NextResetAt:    nextResetAt,
+		Items:          []store.ShopCatalogItem{},
+	}
+	for _, sellItem := range shop.SellItems {
+		item, ok := s.economyRules.Items[strings.TrimSpace(sellItem.ItemID)]
+		if !ok {
+			continue
+		}
+		if sellItem.MinLevel > 0 && snapshot.Level < sellItem.MinLevel {
+			continue
+		}
+		if sellItem.MaxLevel > 0 && snapshot.Level > sellItem.MaxLevel {
+			continue
+		}
+		buyPrice := item.BuyPrice
+		if sellItem.BuyPrice > 0 {
+			buyPrice = sellItem.BuyPrice
+		}
+		rarity := item.Rarity
+		if sellItem.Rarity > 0 {
+			rarity = sellItem.Rarity
+		}
+		bought := purchased[sellItem.SlotIndex]
+		remaining := sellItem.DailyLimit - bought
+		if remaining < 0 {
+			remaining = 0
+		}
+		out.Items = append(out.Items, store.ShopCatalogItem{
+			SlotIndex:      sellItem.SlotIndex,
+			ItemID:         item.ItemID,
+			DisplayName:    item.DisplayName,
+			Quantity:       1,
+			Rarity:         rarity,
+			BuyCurrency:    item.BuyCurrency,
+			BuyPrice:       buyPrice,
+			MinLevel:       sellItem.MinLevel,
+			MaxLevel:       sellItem.MaxLevel,
+			DailyLimit:     sellItem.DailyLimit,
+			PurchasedToday: bought,
+			RemainingToday: remaining,
+			Available:      buyPrice > 0 && remaining > 0,
+		})
+	}
+	return out, nil
+}
+
+func (s *Service) MysteryShopBoard(accountID, characterID int64, shopID string, now time.Time) (store.MysteryShopBoard, error) {
+	if s.rulesErr != nil {
+		return store.MysteryShopBoard{}, s.rulesErr
+	}
+	shop, ok := s.economyRules.Shop(shopID)
+	if !ok || shop.Mystery == nil {
+		return store.MysteryShopBoard{}, errors.New("mystery shop does not exist")
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	snapshot, err := s.store.EconomySnapshot(accountID, characterID)
+	if err != nil {
+		return store.MysteryShopBoard{}, err
+	}
+	state, err := s.store.MysteryShopBoard(accountID, characterID, shop.ShopID)
+	if errors.Is(err, store.ErrNotFound) || mysteryOffersSoldOut(state.Offers) {
+		offers := s.rollMysteryShopOffers(shop.Mystery, snapshot.Level, characterID, now)
+		state, err = s.store.RefreshMysteryShop(store.MysteryShopRefreshRequest{
+			OpID:              fmt.Sprintf("mystery-free-%d-%s-%d", characterID, shop.ShopID, now.Unix()),
+			AccountID:         accountID,
+			CharacterID:       characterID,
+			ShopID:            shop.ShopID,
+			NextFreeRefreshAt: now,
+			GeneratedAt:       now,
+			Offers:            offers,
+		})
+	}
+	if err != nil {
+		return store.MysteryShopBoard{}, err
+	}
+	nextCost, err := s.nextMysteryRefreshTokenCost(shop.Mystery, accountID, characterID, shop.ShopID, now)
+	if err != nil {
+		return store.MysteryShopBoard{}, err
+	}
+	return s.mysteryShopBoardView(shop, state, snapshot.Level, nextCost, now), nil
+}
+
+func (s *Service) RefreshMysteryShop(opID string, accountID, characterID int64, shopID string, now time.Time) (store.MysteryShopBoard, error) {
+	if s.rulesErr != nil {
+		return store.MysteryShopBoard{}, s.rulesErr
+	}
+	shop, ok := s.economyRules.Shop(shopID)
+	if !ok || shop.Mystery == nil {
+		return store.MysteryShopBoard{}, errors.New("mystery shop does not exist")
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	snapshot, err := s.store.EconomySnapshot(accountID, characterID)
+	if err != nil {
+		return store.MysteryShopBoard{}, err
+	}
+	offers := s.rollMysteryShopOffers(shop.Mystery, snapshot.Level, characterID, now)
+	tokenCost, err := s.nextMysteryRefreshTokenCost(shop.Mystery, accountID, characterID, shop.ShopID, now)
+	if err != nil {
+		return store.MysteryShopBoard{}, err
+	}
+	state, err := s.store.RefreshMysteryShop(store.MysteryShopRefreshRequest{
+		OpID:              opID,
+		AccountID:         accountID,
+		CharacterID:       characterID,
+		ShopID:            shop.ShopID,
+		TokenCost:         tokenCost,
+		NextFreeRefreshAt: now,
+		GeneratedAt:       now,
+		Offers:            offers,
+	})
+	if err != nil {
+		return store.MysteryShopBoard{}, err
+	}
+	nextCost, err := s.nextMysteryRefreshTokenCost(shop.Mystery, accountID, characterID, shop.ShopID, now)
+	if err != nil {
+		return store.MysteryShopBoard{}, err
+	}
+	return s.mysteryShopBoardView(shop, state, snapshot.Level, nextCost, now), nil
+}
+
+func (s *Service) availableMysteryOffer(accountID, characterID int64, shopID, itemID string, quantity int64) (store.MysteryShopOffer, error) {
+	board, err := s.MysteryShopBoard(accountID, characterID, shopID, time.Now().UTC())
+	if err != nil {
+		return store.MysteryShopOffer{}, err
+	}
+	for _, offer := range board.Offers {
+		if offer.Purchased {
+			continue
+		}
+		if strings.TrimSpace(offer.ItemID) == strings.TrimSpace(itemID) && offer.Quantity == quantity {
+			if offer.GoldPrice <= 0 && offer.TokenPrice <= 0 {
+				return store.MysteryShopOffer{}, errors.New("mystery shop offer price is not configured")
+			}
+			return offer, nil
+		}
+	}
+	return store.MysteryShopOffer{}, errors.New("item is not available in the current mystery shop")
+}
+
+func (s *Service) mysteryShopBoardView(shop rules.Shop, state store.MysteryShopBoardState, level int, nextManualRefreshTokenCost int64, now time.Time) store.MysteryShopBoard {
+	cfg := shop.Mystery
+	unlocked := unlockedMysterySlots(cfg, level)
+	soldOut := mysteryOffersSoldOut(state.Offers)
+	return store.MysteryShopBoard{
+		ShopID:                     shop.ShopID,
+		CharacterID:                state.CharacterID,
+		CharacterLevel:             level,
+		UnlockedSlots:              unlocked,
+		MaxSlots:                   cfg.MaxSlots,
+		NextManualRefreshTokenCost: nextManualRefreshTokenCost,
+		SoldOut:                    soldOut,
+		NextFreeRefreshAt:          state.NextFreeRefreshAt,
+		FreeRefreshAvailable:       soldOut,
+		GeneratedAt:                state.GeneratedAt,
+		Offers:                     state.Offers,
+	}
+}
+
+func (s *Service) nextMysteryRefreshTokenCost(cfg *rules.MysteryShopConfig, accountID, characterID int64, shopID string, now time.Time) (int64, error) {
+	start, end, err := dayRange(now, cfg.DailyLimitTimezone)
+	if err != nil {
+		return 0, err
+	}
+	count, err := s.store.MysteryShopPaidRefreshCount(accountID, characterID, shopID, start, end)
+	if err != nil {
+		return 0, err
+	}
+	cost := cfg.ManualRefreshTokenBaseCost + int64(count)*cfg.ManualRefreshTokenStepCost
+	if cfg.ManualRefreshTokenMaxCost > 0 && cost > cfg.ManualRefreshTokenMaxCost {
+		cost = cfg.ManualRefreshTokenMaxCost
+	}
+	return cost, nil
+}
+
+func mysteryOffersSoldOut(offers []store.MysteryShopOffer) bool {
+	if len(offers) == 0 {
+		return true
+	}
+	for _, offer := range offers {
+		if !offer.Purchased {
+			return false
+		}
+	}
+	return true
+}
+
+func dayRange(now time.Time, timezone string) (time.Time, time.Time, error) {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	loc, err := time.LoadLocation(strings.TrimSpace(timezone))
+	if err != nil {
+		return time.Time{}, time.Time{}, err
+	}
+	local := now.In(loc)
+	startLocal := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, loc)
+	return startLocal.UTC(), startLocal.Add(24 * time.Hour).UTC(), nil
+}
+
+func shopBusinessDay(now time.Time, timezone string) (string, time.Time, time.Time, error) {
+	if strings.TrimSpace(timezone) == "" {
+		timezone = "Asia/Shanghai"
+	}
+	start, end, err := dayRange(now, timezone)
+	if err != nil {
+		return "", time.Time{}, time.Time{}, err
+	}
+	loc, err := time.LoadLocation(strings.TrimSpace(timezone))
+	if err != nil {
+		return "", time.Time{}, time.Time{}, err
+	}
+	return start.In(loc).Format("2006-01-02"), start, end, nil
+}
+
+func (s *Service) rollMysteryShopOffers(cfg *rules.MysteryShopConfig, level int, characterID int64, now time.Time) []store.MysteryShopOffer {
+	unlocked := unlockedMysterySlots(cfg, level)
+	offers := make([]store.MysteryShopOffer, 0, unlocked)
+	rng := rand.New(rand.NewPCG(seedInt64("mystery", characterID, now.Unix(), int64(level)), 0x9d327f92ad13c6b5))
+	for _, slot := range cfg.Slots {
+		if slot.SlotIndex > unlocked || level < slot.UnlockLevel {
+			continue
+		}
+		entry := chooseMysteryPoolEntry(rng, slot.Pools, level)
+		discount := chooseMysteryDiscount(rng, cfg.Discounts)
+		if entry.MinDiscount > 0 && discount < entry.MinDiscount {
+			discount = entry.MinDiscount
+		}
+		offer := store.MysteryShopOffer{
+			SlotIndex:   slot.SlotIndex,
+			ItemID:      strings.TrimSpace(entry.ItemID),
+			Quantity:    entry.Quantity,
+			Rarity:      entry.Rarity,
+			DiscountBps: discount,
+		}
+		if entry.BaseGold > 0 {
+			offer.GoldPrice = bpsAmount(entry.BaseGold, int64(discount))
+		}
+		if entry.BaseToken > 0 {
+			offer.TokenPrice = bpsAmount(entry.BaseToken, int64(discount))
+		}
+		offers = append(offers, offer)
+	}
+	return offers
+}
+
+func unlockedMysterySlots(cfg *rules.MysteryShopConfig, level int) int {
+	unlocked := 0
+	for _, slot := range cfg.Slots {
+		if level >= slot.UnlockLevel && slot.SlotIndex > unlocked {
+			unlocked = slot.SlotIndex
+		}
+	}
+	if unlocked > cfg.MaxSlots {
+		return cfg.MaxSlots
+	}
+	return unlocked
+}
+
+func chooseMysteryPoolEntry(rng *rand.Rand, entries []rules.MysteryShopPoolEntry, level int) rules.MysteryShopPoolEntry {
+	total := 0
+	for _, entry := range entries {
+		if !mysteryEntryLevelEligible(entry, level) {
+			continue
+		}
+		total += entry.Weight
+	}
+	if total <= 0 {
+		return entries[len(entries)-1]
+	}
+	roll := rng.IntN(total)
+	for _, entry := range entries {
+		if !mysteryEntryLevelEligible(entry, level) {
+			continue
+		}
+		roll -= entry.Weight
+		if roll < 0 {
+			return entry
+		}
+	}
+	return entries[len(entries)-1]
+}
+
+func mysteryEntryLevelEligible(entry rules.MysteryShopPoolEntry, level int) bool {
+	if entry.MinLevel > 0 && level < entry.MinLevel {
+		return false
+	}
+	if entry.MaxLevel > 0 && level > entry.MaxLevel {
+		return false
+	}
+	return true
+}
+
+func chooseMysteryDiscount(rng *rand.Rand, discounts []rules.MysteryDiscount) int {
+	total := 0
+	for _, discount := range discounts {
+		total += discount.Weight
+	}
+	roll := rng.IntN(total)
+	for _, discount := range discounts {
+		roll -= discount.Weight
+		if roll < 0 {
+			return discount.Bps
+		}
+	}
+	return 10000
+}
+
+func seedInt64(parts ...any) uint64 {
+	h := fnv.New64a()
+	for _, part := range parts {
+		_, _ = h.Write([]byte(fmt.Sprint(part)))
+		_, _ = h.Write([]byte{0})
+	}
+	return h.Sum64()
+}
+
+func bpsAmount(amount, bps int64) int64 {
+	if amount <= 0 || bps <= 0 {
+		return 0
+	}
+	return (amount*bps + 9999) / 10000
 }
 
 func (s *Service) ShopSell(opID string, accountID, characterID int64, shopID string, slotIndex int, quantity int64, equipmentUID string) (store.ShopSellResult, error) {

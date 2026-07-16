@@ -29,6 +29,8 @@ type adminCatalogItem struct {
 	IsEquipment          bool    `json:"isEquipment"`
 	EquipmentSlot        *int    `json:"equipmentSlot"`
 	EquipmentSlotLabel   *string `json:"equipmentSlotLabel"`
+	WeaponType           *int    `json:"weaponType,omitempty"`
+	WeaponTypeKey        *string `json:"weaponTypeKey,omitempty"`
 	SeriesID             string  `json:"seriesId,omitempty"`
 	Stage                int     `json:"stage,omitempty"`
 	DisplayType          string  `json:"displayType,omitempty"`
@@ -92,21 +94,21 @@ func categoryLabel(category string) string {
 func equipmentSlotLabel(slot int) string {
 	switch slot {
 	case 0:
-		return "手套"
-	case 1:
-		return "鞋子"
-	case 2:
-		return "头盔"
-	case 3:
-		return "胸甲"
-	case 4:
 		return "武器"
-	case 5:
+	case 1:
+		return "头盔"
+	case 2:
+		return "胸甲"
+	case 3:
 		return "披风"
-	case 6:
-		return "坐骑"
-	case 7:
+	case 4:
+		return "手套"
+	case 5:
 		return "饰品"
+	case 6:
+		return "战靴"
+	case 7:
+		return "坐骑"
 	default:
 		return "未知"
 	}
@@ -232,9 +234,19 @@ func (h *Handler) catalogItems() []adminCatalogItem {
 			row.EquipmentSlot = &slot
 			row.EquipmentSlotLabel = &label
 			row.DisplayType = displayTypes[item.ItemID]
+			if item.WeaponType != 0 || strings.TrimSpace(item.WeaponTypeKey) != "" {
+				weaponType := item.WeaponType
+				weaponTypeKey := strings.TrimSpace(item.WeaponTypeKey)
+				row.WeaponType = &weaponType
+				row.WeaponTypeKey = &weaponTypeKey
+			}
 			if template, ok := h.rules.EquipmentTemplate(item.ItemID); ok {
 				row.SeriesID = template.SeriesID
 				row.Stage = template.Stage
+				weaponType := template.WeaponType
+				weaponTypeKey := template.WeaponTypeKey
+				row.WeaponType = &weaponType
+				row.WeaponTypeKey = &weaponTypeKey
 				row.Category = template.Category
 				row.CategoryLabel = categoryLabel(template.Category)
 				slot = template.EquipSlot

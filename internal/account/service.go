@@ -8,6 +8,7 @@ import (
 	"unicode"
 
 	"github.com/flenzero/aeon-backend/internal/chain"
+	"github.com/flenzero/aeon-backend/internal/economy/rules"
 	"github.com/flenzero/aeon-backend/internal/platform/redisx"
 	"github.com/flenzero/aeon-backend/internal/platform/security"
 	"github.com/flenzero/aeon-backend/internal/platform/store"
@@ -19,6 +20,8 @@ type Service struct {
 	jwtSecret       string
 	sessionTTLHours int
 	onlineTTLSec    int
+	economyRules    *rules.Config
+	economyRulesErr error
 }
 
 func NewService(st store.Repository, jwtSecret string) *Service {
@@ -42,6 +45,17 @@ func NewServiceWithCache(st store.Repository, cache redisx.Client, jwtSecret str
 		sessionTTLHours: sessionTTLHours,
 		onlineTTLSec:    onlineTTLSec,
 	}
+}
+
+func (s *Service) LoadEconomyRules(configDir string) *Service {
+	configDir = strings.TrimSpace(configDir)
+	if configDir == "" {
+		return s
+	}
+	economyRules, err := rules.LoadDir(configDir)
+	s.economyRules = economyRules
+	s.economyRulesErr = err
+	return s
 }
 
 type WalletLoginResult struct {
@@ -143,6 +157,14 @@ func (s *Service) CreateCharacterWithAppearance(accountID int64, name string, ap
 	return s.store.CreateCharacterWithAppearance(accountID, name, appearance)
 }
 
+func (s *Service) Characters(accountID int64) []store.Character {
+	rows := s.store.Characters(accountID)
+	for index := range rows {
+		rows[index] = s.resolveCharacterEquipment(rows[index])
+	}
+	return rows
+}
+
 func (s *Service) DeleteCharacter(accountID, characterID int64) error {
 	return s.store.DeleteCharacter(accountID, characterID)
 }
@@ -156,7 +178,33 @@ func (s *Service) PlayerProfile(accountID, characterID int64) (store.PlayerState
 	if err != nil {
 		return store.PlayerState{}, store.EconomySnapshot{}, err
 	}
-	return player, economy, nil
+	return player, s.resolveEconomySnapshot(economy), nil
+}
+
+func (s *Service) resolveCharacterEquipment(character store.Character) store.Character {
+	if s.economyRules == nil || s.economyRulesErr != nil {
+		return character
+	}
+	for index := range character.EquipmentItems {
+		resolved, err := s.economyRules.ResolveEquipmentItem(character.EquipmentItems[index])
+		if err == nil {
+			character.EquipmentItems[index] = resolved
+		}
+	}
+	return character
+}
+
+func (s *Service) resolveEconomySnapshot(snapshot store.EconomySnapshot) store.EconomySnapshot {
+	if s.economyRules == nil || s.economyRulesErr != nil {
+		return snapshot
+	}
+	for index := range snapshot.Equipment {
+		resolved, err := s.economyRules.ResolveEquipmentItem(snapshot.Equipment[index])
+		if err == nil {
+			snapshot.Equipment[index] = resolved
+		}
+	}
+	return snapshot
 }
 
 func (s *Service) SavePlayerState(req store.PlayerSaveRequest) error {

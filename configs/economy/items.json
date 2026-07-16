@@ -6,7 +6,9 @@
       "category": "material",
       "rarity": 1,
       "maxStack": 999,
-      "isEquipment": false
+      "isEquipment": false,
+      "buyPrice": 20,
+      "sellPrice": 4
     },
     {
       "itemId": "gloomcap_spore",
@@ -14,7 +16,9 @@
       "category": "material",
       "rarity": 2,
       "maxStack": 999,
-      "isEquipment": false
+      "isEquipment": false,
+      "buyPrice": 66,
+      "sellPrice": 16
     },
     {
       "itemId": "aeon_shard",
@@ -24,7 +28,8 @@
       "maxStack": 99,
       "isEquipment": false,
       "tradable": true,
-      "defaultBindType": "UNBOUND"
+      "defaultBindType": "UNBOUND",
+      "sellPrice": 260
     },
     {
       "itemId": "market_stall_permit",
@@ -34,7 +39,8 @@
       "maxStack": 99,
       "isEquipment": false,
       "tradable": false,
-      "defaultBindType": "BOUND"
+      "defaultBindType": "BOUND",
+      "sellPrice": 120
     },
     {
       "itemId": "aeb_exchange_voucher",
@@ -44,7 +50,9 @@
       "maxStack": 99,
       "isEquipment": false,
       "tradable": false,
-      "defaultBindType": "BOUND"
+      "defaultBindType": "BOUND",
+      "sellPrice": 300,
+      "grantLockedAeb": 30
     },
     {
       "itemId": "rusted_saber",
@@ -53,9 +61,13 @@
       "rarity": 1,
       "maxStack": 1,
       "isEquipment": true,
-      "equipSlot": 1,
+      "equipSlot": 0,
+      "weaponType": 1,
+      "weaponTypeKey": "sword",
       "tradable": true,
-      "defaultBindType": "UNBOUND"
+      "defaultBindType": "UNBOUND",
+      "buyPrice": 300,
+      "sellPrice": 80
     },
     {
       "itemId": "nightglass_staff",
@@ -64,9 +76,12 @@
       "rarity": 3,
       "maxStack": 1,
       "isEquipment": true,
-      "equipSlot": 1,
+      "equipSlot": 0,
+      "weaponType": 4,
+      "weaponTypeKey": "staff",
       "tradable": true,
-      "defaultBindType": "UNBOUND"
+      "defaultBindType": "UNBOUND",
+      "sellPrice": 160
     },
     {
       "itemId": "emberroot_seed",
@@ -74,7 +89,9 @@
       "category": "seed",
       "rarity": 1,
       "maxStack": 999,
-      "isEquipment": false
+      "isEquipment": false,
+      "buyPrice": 20,
+      "sellPrice": 3
     },
     {
       "itemId": "emberroot",
@@ -82,7 +99,8 @@
       "category": "crop",
       "rarity": 1,
       "maxStack": 999,
-      "isEquipment": false
+      "isEquipment": false,
+      "sellPrice": 5
     },
     {
       "itemId": "ashwood_white",
@@ -92,7 +110,9 @@
       "maxStack": 999,
       "isEquipment": false,
       "tradable": true,
-      "defaultBindType": "UNBOUND"
+      "defaultBindType": "UNBOUND",
+      "buyPrice": 15,
+      "sellPrice": 3
     },
     {
       "itemId": "ashwood_green",
@@ -102,7 +122,9 @@
       "maxStack": 999,
       "isEquipment": false,
       "tradable": true,
-      "defaultBindType": "UNBOUND"
+      "defaultBindType": "UNBOUND",
+      "buyPrice": 45,
+      "sellPrice": 12
     },
     {
       "itemId": "ashwood_blue",
@@ -112,7 +134,8 @@
       "maxStack": 999,
       "isEquipment": false,
       "tradable": true,
-      "defaultBindType": "UNBOUND"
+      "defaultBindType": "UNBOUND",
+      "sellPrice": 90
     },
     {
       "itemId": "ashwood_purple",
@@ -122,7 +145,8 @@
       "maxStack": 999,
       "isEquipment": false,
       "tradable": true,
-      "defaultBindType": "UNBOUND"
+      "defaultBindType": "UNBOUND",
+      "sellPrice": 130
     },
     {
       "itemId": "gloomstone_white",
@@ -132,7 +156,9 @@
       "maxStack": 999,
       "isEquipment": false,
       "tradable": true,
-      "defaultBindType": "UNBOUND"
+      "defaultBindType": "UNBOUND",
+      "buyPrice": 18,
+      "sellPrice": 4
     },
     {
       "itemId": "gloomstone_green",
@@ -142,7 +168,9 @@
       "maxStack": 999,
       "isEquipment": false,
       "tradable": true,
-      "defaultBindType": "UNBOUND"
+      "defaultBindType": "UNBOUND",
+      "buyPrice": 54,
+      "sellPrice": 14
     },
     {
       "itemId": "gloomstone_blue",
@@ -152,7 +180,8 @@
       "maxStack": 999,
       "isEquipment": false,
       "tradable": true,
-      "defaultBindType": "UNBOUND"
+      "defaultBindType": "UNBOUND",
+      "sellPrice": 95
     },
     {
       "itemId": "gloomstone_purple",
@@ -162,7 +191,8 @@
       "maxStack": 999,
       "isEquipment": false,
       "tradable": true,
-      "defaultBindType": "UNBOUND"
+      "defaultBindType": "UNBOUND",
+      "sellPrice": 135
     },
     {
       "itemId": "shadow_iron_white",
@@ -172,7 +202,9 @@
       "maxStack": 999,
       "isEquipment": false,
       "tradable": true,
-      "defaultBindType": "UNBOUND"
+      "defaultBindType": "UNBOUND",
+      "buyPrice": 20,
+      "sellPrice": 4
     },
     {
       "itemId": "shadow_iron_green",
@@ -182,7 +214,9 @@
       "maxStack": 999,
       "isEquipment": false,
       "tradable": true,
-      "defaultBindType": "UNBOUND"
+      "defaultBindType": "UNBOUND",
+      "buyPrice": 60,
+      "sellPrice": 15
     },
     {
       "itemId": "shadow_iron_blue",
@@ -192,7 +226,8 @@
       "maxStack": 999,
       "isEquipment": false,
       "tradable": true,
-      "defaultBindType": "UNBOUND"
+      "defaultBindType": "UNBOUND",
+      "sellPrice": 100
     },
     {
       "itemId": "shadow_iron_purple",
@@ -202,7 +237,8 @@
       "maxStack": 999,
       "isEquipment": false,
       "tradable": true,
-      "defaultBindType": "UNBOUND"
+      "defaultBindType": "UNBOUND",
+      "sellPrice": 145
     },
     {
       "itemId": "gloomcap_spore_white",
@@ -212,7 +248,9 @@
       "maxStack": 999,
       "isEquipment": false,
       "tradable": true,
-      "defaultBindType": "UNBOUND"
+      "defaultBindType": "UNBOUND",
+      "buyPrice": 22,
+      "sellPrice": 5
     },
     {
       "itemId": "gloomcap_spore_green",
@@ -222,7 +260,9 @@
       "maxStack": 999,
       "isEquipment": false,
       "tradable": true,
-      "defaultBindType": "UNBOUND"
+      "defaultBindType": "UNBOUND",
+      "buyPrice": 66,
+      "sellPrice": 16
     },
     {
       "itemId": "gloomcap_spore_blue",
@@ -232,7 +272,8 @@
       "maxStack": 999,
       "isEquipment": false,
       "tradable": true,
-      "defaultBindType": "UNBOUND"
+      "defaultBindType": "UNBOUND",
+      "sellPrice": 105
     },
     {
       "itemId": "gloomcap_spore_purple",
@@ -242,7 +283,8 @@
       "maxStack": 999,
       "isEquipment": false,
       "tradable": true,
-      "defaultBindType": "UNBOUND"
+      "defaultBindType": "UNBOUND",
+      "sellPrice": 150
     },
     {
       "itemId": "boss_ticket_ashen_threshold",
@@ -252,7 +294,8 @@
       "maxStack": 99,
       "isEquipment": false,
       "tradable": true,
-      "defaultBindType": "UNBOUND"
+      "defaultBindType": "UNBOUND",
+      "sellPrice": 180
     },
     {
       "itemId": "boss_ticket_gloomwood",
@@ -262,7 +305,8 @@
       "maxStack": 99,
       "isEquipment": false,
       "tradable": true,
-      "defaultBindType": "UNBOUND"
+      "defaultBindType": "UNBOUND",
+      "sellPrice": 240
     },
     {
       "itemId": "boss_ticket_voidscar",
@@ -272,7 +316,8 @@
       "maxStack": 99,
       "isEquipment": false,
       "tradable": true,
-      "defaultBindType": "UNBOUND"
+      "defaultBindType": "UNBOUND",
+      "sellPrice": 320
     },
     {
       "itemId": "bounty_badge_common",
@@ -282,7 +327,8 @@
       "maxStack": 999,
       "isEquipment": false,
       "tradable": false,
-      "defaultBindType": "BOUND"
+      "defaultBindType": "BOUND",
+      "sellPrice": 40
     },
     {
       "itemId": "bounty_badge_rare",
@@ -292,7 +338,8 @@
       "maxStack": 999,
       "isEquipment": false,
       "tradable": false,
-      "defaultBindType": "BOUND"
+      "defaultBindType": "BOUND",
+      "sellPrice": 110
     },
     {
       "itemId": "enhancement_stone_t1",
@@ -300,7 +347,9 @@
       "category": "enhancement_stone",
       "rarity": 1,
       "maxStack": 999,
-      "isEquipment": false
+      "isEquipment": false,
+      "buyPrice": 120,
+      "sellPrice": 25
     },
     {
       "itemId": "enhancement_stone_t5",
@@ -308,7 +357,9 @@
       "category": "enhancement_stone",
       "rarity": 2,
       "maxStack": 999,
-      "isEquipment": false
+      "isEquipment": false,
+      "buyPrice": 200,
+      "sellPrice": 45
     },
     {
       "itemId": "enhancement_stone_t10",
@@ -316,7 +367,8 @@
       "category": "enhancement_stone",
       "rarity": 3,
       "maxStack": 999,
-      "isEquipment": false
+      "isEquipment": false,
+      "sellPrice": 85
     },
     {
       "itemId": "enhancement_stone_t15",
@@ -324,7 +376,8 @@
       "category": "enhancement_stone",
       "rarity": 4,
       "maxStack": 999,
-      "isEquipment": false
+      "isEquipment": false,
+      "sellPrice": 120
     },
     {
       "itemId": "enhancement_stone_t20",
@@ -332,7 +385,8 @@
       "category": "enhancement_stone",
       "rarity": 4,
       "maxStack": 999,
-      "isEquipment": false
+      "isEquipment": false,
+      "sellPrice": 140
     },
     {
       "itemId": "enhancement_stone_t25",
@@ -340,7 +394,8 @@
       "category": "enhancement_stone",
       "rarity": 5,
       "maxStack": 999,
-      "isEquipment": false
+      "isEquipment": false,
+      "sellPrice": 170
     },
     {
       "itemId": "enhancement_stone_t30",
@@ -348,7 +403,63 @@
       "category": "enhancement_stone",
       "rarity": 6,
       "maxStack": 999,
-      "isEquipment": false
+      "isEquipment": false,
+      "sellPrice": 210
+    },
+    {
+      "itemId": "weapon_bundle_t1_t5_gold",
+      "displayName": "缚灰幽皮金色武器大礼包",
+      "category": "bundle",
+      "rarity": 5,
+      "maxStack": 1,
+      "isEquipment": false,
+      "tradable": false,
+      "defaultBindType": "BOUND",
+      "sellPrice": 0
+    },
+    {
+      "itemId": "weapon_bundle_t10_t25_gold",
+      "displayName": "影铁虚铸金色武器大礼包",
+      "category": "bundle",
+      "rarity": 5,
+      "maxStack": 1,
+      "isEquipment": false,
+      "tradable": false,
+      "defaultBindType": "BOUND",
+      "sellPrice": 0
+    },
+    {
+      "itemId": "weapon_bundle_t20_t30_gold",
+      "displayName": "蚀日永劫金色武器大礼包",
+      "category": "bundle",
+      "rarity": 5,
+      "maxStack": 1,
+      "isEquipment": false,
+      "tradable": false,
+      "defaultBindType": "BOUND",
+      "sellPrice": 0
+    },
+    {
+      "itemId": "weapon_bundle_t30_t35_ticket",
+      "displayName": "永劫武器与35级装备兑换券礼包",
+      "category": "bundle",
+      "rarity": 5,
+      "maxStack": 1,
+      "isEquipment": false,
+      "tradable": false,
+      "defaultBindType": "BOUND",
+      "sellPrice": 0
+    },
+    {
+      "itemId": "equipment_voucher_t35",
+      "displayName": "35级装备兑换券",
+      "category": "equipment_voucher",
+      "rarity": 5,
+      "maxStack": 99,
+      "isEquipment": false,
+      "tradable": false,
+      "defaultBindType": "BOUND",
+      "sellPrice": 500
     }
   ]
 }

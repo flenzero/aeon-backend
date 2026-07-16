@@ -87,10 +87,26 @@ X-Service-Signature: <base58-ed25519-signature>
 ### 2.2 InventoryItem / EquipmentItem
 
 - InventoryItem：`id`、`itemId`、`quantity`、`slot`、`durability`、`enhanceLevel`。
-- EquipmentItem：`id`、`equipmentUid`、`itemId`、`rarity`、`enhanceLevel`、`durability`、`maxDurability`、`status`、`equipSlot`、`slot`、`nftContract?`、`nftTokenId?`、`affixes?`。
+- EquipmentItem：`id`、`equipmentUid`、`itemId`、`rarity`、`enhanceLevel`、`durability`、`maxDurability`、`status`、`equipSlot`、`slot`、`weaponType`、`weaponTypeKey`、`nftContract?`、`nftTokenId?`、`affixes?`。
 - 当前装备模板的派生字段：`resolvedBaseFlat`、`resolvedBasePercent`、`resolvedFlatStats`、`resolvedPercentStats`、`finalBonuses?`。这些字段由账号服按当前经济配置实时计算，**不代表数据库持久化白值**。
 - 新装备的 `affixes` 在数据库只保存 `affixId`、`instanceId`、`enhanceHits`；API 响应额外带 `stat`、`value` 以供客户端展示。`value` 可因配置发布而变化，客户端不得把它回写为装备属性。
-- 坐骑固定使用 `equipSlot=6`，并在 `finalBonuses` 中返回 `finalMaxHp=0.05`、`finalAttack=0.05`、`moveSpeed=0.25`。
+- `equipSlot` 是装备槽位，不是背包/仓库格子；`slot` 才是背包或仓库位置。
+- `weaponType` 只表示武器子类型；非武器和坐骑返回 `0/none`。当前枚举：`0 none`、`1 sword`、`2 axe`、`3 bow`、`4 staff`。
+- 坐骑固定使用 `equipSlot=7`，并在 `finalBonuses` 中返回 `finalMaxHp=0.05`、`finalAttack=0.05`、`moveSpeed=0.25`。
+
+`equipSlot` 当前按角色界面两列从上到下编号：
+
+| 值 | key | 界面位置 | 说明 |
+| ---: | --- | --- | --- |
+| `-1` | `none` | 未穿戴 | 背包、仓库、掉落盘等非穿戴状态 |
+| `0` | `weapon` | 左一 | 武器槽；具体武器子类型看 `weaponType` |
+| `1` | `helmet` | 右一 | 头盔 |
+| `2` | `chest` | 左二 | 胸甲 |
+| `3` | `cloak` | 右二 | 披风 |
+| `4` | `gloves` | 左三 | 手套 |
+| `5` | `accessory` | 右三 | 饰品/护符 |
+| `6` | `shoes` | 左四 | 战靴 |
+| `7` | `mount` | 右四 | 坐骑 |
 
 ### 2.3 PaymentOrder
 
@@ -223,7 +239,7 @@ Body：`{"sessionId":"session_...","refreshToken":"refresh_..."}`。
 
 - 认证：`account.gameplay`；`X-Account-Id` 必填。
 - 成功：`characters` 数组；字段为 `id`、`accountId`、`name`、`slotIndex`、`level`、`appearance`、`equipmentItems`、`createdAt`、`lastPlayed`、`hasLastPlayed`、`deleted`。
-- `equipmentItems` 只包含当前已穿戴装备，用于角色选择/登录外观展示；背包、仓库、交易行装备不返回。
+- `equipmentItems` 只包含当前已穿戴装备，用于角色选择/登录外观展示；背包、仓库、交易行装备不返回。装备字段复用 `EquipmentItem`，会带 `equipSlot`、`weaponType`、`weaponTypeKey` 和当前配置解析出的展示属性。
 
 #### POST `/api/character/create`
 
@@ -453,16 +469,47 @@ Body：`{"opId":"repair-01","characterId":10,"equipmentUid":"eq_..."}`。
 
 ### 4.3 商店、抽奖与悬赏
 
+#### GET `/api/economy/shop/catalog`
+
+查询普通商人的当前货架。杂货商：`/api/economy/shop/catalog?shopId=general_merchant`；装备商：`/api/economy/shop/catalog?shopId=equipment_merchant`。不传 `shopId` 时默认 `general_merchant`。
+
+- 认证：`economy.gameplay`。
+- 返回 `items[]`，包含 `slotIndex`、`itemId`、`buyCurrency`、`buyPrice`、`dailyLimit`、`purchasedToday`、`remainingToday`、`available`。
+- 普通商店按角色独立统计每日槽位限购，营业日按商店 `dailyLimitTimezone`（默认 `Asia/Shanghai`）切天，返回 `businessDate` 与 `nextResetAt`。
+- 装备商只返回角色等级当前可装备的蓝色装备；神秘商人不走此接口，继续使用 `/api/economy/shop/mystery`。
+
+#### GET `/api/economy/shop/mystery`
+
+查询神秘商人当前货架。不传 `shopId` 时默认 `mystery_merchant`。
+
+- 认证：`economy.gameplay`。
+- 神秘商人槽位没有单独解锁接口，按角色等级自动解锁，并在返回中给出 `unlockedSlots` 与 `maxSlots`。
+- 当前槽位规则：`0-9级` 开 1 槽，`10-19级` 开 2 槽，`20-29级` 开 3 槽，`30级+` 开 4 槽，当前最多 4 槽。
+- 返回 `offers[]` 只包含已解锁槽位的商品；每个商品带 `slotIndex`、`itemId`、`quantity`、`rarity`、`goldPrice` 或 `tokenPrice`、`discountBps`、`purchased`。
+- 如果角色第一次打开神秘商人，或当前货架所有商品都已购买完，后端会免费生成一轮新货架；只要仍有任意未购买商品，查看接口不会自动刷新。
+- `freeRefreshAvailable` 表示当前是否已售罄并可免费刷新；`nextManualRefreshTokenCost` 表示下一次手动刷新需要消耗的 AEB。
+
+#### POST `/api/economy/shop/mystery/refresh`
+
+手动刷新神秘商人货架。
+
+- 认证：`economy.gameplay`。
+- Body：`{"opId":"mystery-refresh-01","characterId":10,"shopId":"mystery_merchant"}`；不传 `shopId` 时默认 `mystery_merchant`。
+- 手动刷新消耗 AEB，可以使用锁定 AEB；刷新价格每天按角色独立重置，第一次 10，第二次 15，每次 +5，最高 50，之后当天每次都是 50。
+- 刷新后仍按角色等级只生成已解锁槽位的商品。
+
 #### POST `/api/economy/shop/buy`
 
 Body：`{"opId":"buy-01","characterId":10,"shopId":"shop","itemId":"ashwood_white","quantity":1}`。
 
 - 认证：`economy.gameplay`。
-- 商品可买性由 `configs/economy/shops.json` 决定；价格和币种由 `items.json` 的 `buyPrice`、`buyCurrency`、`grantGold` 决定。
+- 商品可买性由 `configs/economy/shops.json` 决定；普通商人的槽位和每日限量也由 `shops.json` 决定。
+- 价格和币种默认由 `items.json` 的 `buyPrice`、`buyCurrency`、`grantGold` 决定；普通商店条目可以用 `sellItems[].buyPrice` 覆盖买价。
 - `buyCurrency=0`：扣角色金币并立即交割，返回 `snapshot`。
 - `buyCurrency=1`：创建 `SHOP_BUY` Payment Order，付款确认后按订单 payload 交割；返回 `order`。
 - 普通物品进入 `inventory_items`；装备类物品创建唯一 `equipment_items` 实例；`grantGold > 0` 的商品只发金币。
 - `buyPrice=0` 或未配置价格时拒绝成交。
+- 普通商店购买会扣减对应 `slotIndex` 的今日剩余数量；超过 `dailyLimit` 时拒绝成交。
 
 #### POST `/api/economy/shop/sell`
 
@@ -862,7 +909,7 @@ Body：`{"orderId":"uuid","reason":"chain confirmation"}`。
   "equipmentItems": [{
     "id": 501,
     "equipmentUid": "eq_abc",
-    "itemId": "iron_sword",
+    "itemId": "ashbound_sword_t1",
     "rarity": 3,
     "enhanceLevel": 1,
     "durability": 95,
@@ -870,6 +917,8 @@ Body：`{"orderId":"uuid","reason":"chain confirmation"}`。
     "status": "ACTIVE",
     "equipSlot": -1,
     "slot": 4,
+    "weaponType": 1,
+    "weaponTypeKey": "sword",
     "nftContract": null,
     "nftTokenId": null,
     "affixes": [{"affixId": "atk_flat", "instanceId": "atk_flat#1", "enhanceHits": 1, "stat": "attack", "value": 12}]
@@ -956,9 +1005,10 @@ Body：`{"orderId":"uuid","reason":"chain confirmation"}`。
 | POST `/api/economy/warehouse/withdraw` | Header：`X-Account-Id: 1`；Body：`{"opId":"wh-withdraw-01","characterId":10,"slotIndex":0,"quantity":2}` 或 `{"opId":"wh-withdraw-eq-01","characterId":10,"equipmentUid":"eq_abc"}` | `{"ok":true,"data":{"snapshot":{...EconomySnapshot}}}` |
 | POST `/api/economy/equipment/equip` | Header：`X-Account-Id: 1`；Body：`{"opId":"equip-01","characterId":10,"equipmentUid":"eq_abc","equipSlot":0}` | `{"ok":true,"data":{"snapshot":{...EconomySnapshot}}}` |
 | POST `/api/economy/equipment/unequip` | Header：`X-Account-Id: 1`；Body：`{"opId":"unequip-01","characterId":10,"equipmentUid":"eq_abc"}` | `{"ok":true,"data":{"snapshot":{...EconomySnapshot}}}` |
-| POST `/api/economy/equipment/repair` | Header：`X-Account-Id: 1`；Body：`{"opId":"repair-01","characterId":10,"equipmentUid":"eq_abc"}` | `{"ok":true,"data":{"equipment":{"id":501,"equipmentUid":"eq_abc","itemId":"iron_sword","rarity":3,"enhanceLevel":1,"durability":100,"maxDurability":100,"status":"ACTIVE","equipSlot":-1,"slot":4,"nftContract":null,"nftTokenId":null},"costToken":5,"repairedPoints":5,"snapshot":{...EconomySnapshot}}}` |
-| POST `/api/economy/equipment/enhance` | Header：`X-Account-Id: 1`；Body：`{"opId":"enhance-01","characterId":10,"equipmentUid":"eq_abc"}` | `{"ok":true,"data":{"equipment":{"id":501,"equipmentUid":"eq_abc","itemId":"iron_sword","rarity":3,"enhanceLevel":2,"durability":100,"maxDurability":100,"status":"ACTIVE","equipSlot":-1,"slot":4,"nftContract":null,"nftTokenId":null},"goldCost":100,"stoneItemId":"enhance_stone_t1","stoneQuantity":1,"enhancedAffix":{"affixId":"atk_flat","instanceId":"atk_flat#1","enhanceHits":2,"stat":"attack","value":13.2},"snapshot":{...EconomySnapshot}}}` |
+| POST `/api/economy/equipment/repair` | Header：`X-Account-Id: 1`；Body：`{"opId":"repair-01","characterId":10,"equipmentUid":"eq_abc"}` | `{"ok":true,"data":{"equipment":{"id":501,"equipmentUid":"eq_abc","itemId":"ashbound_sword_t1","rarity":3,"enhanceLevel":1,"durability":100,"maxDurability":100,"status":"ACTIVE","equipSlot":-1,"slot":4,"weaponType":1,"weaponTypeKey":"sword","nftContract":null,"nftTokenId":null},"costToken":5,"repairedPoints":5,"snapshot":{...EconomySnapshot}}}` |
+| POST `/api/economy/equipment/enhance` | Header：`X-Account-Id: 1`；Body：`{"opId":"enhance-01","characterId":10,"equipmentUid":"eq_abc"}` | `{"ok":true,"data":{"equipment":{"id":501,"equipmentUid":"eq_abc","itemId":"ashbound_sword_t1","rarity":3,"enhanceLevel":2,"durability":100,"maxDurability":100,"status":"ACTIVE","equipSlot":-1,"slot":4,"weaponType":1,"weaponTypeKey":"sword","nftContract":null,"nftTokenId":null},"goldCost":100,"stoneItemId":"enhance_stone_t1","stoneQuantity":1,"enhancedAffix":{"affixId":"atk_flat","instanceId":"atk_flat#1","enhanceHits":2,"stat":"attack","value":13.2},"snapshot":{...EconomySnapshot}}}` |
 | POST `/api/economy/equipment/npc-recycle` | Header：`X-Account-Id: 1`；Body：`{"opId":"npc-recycle-01","characterId":10,"equipmentUid":"eq_abc"}` | `{"ok":true,"data":{"goldCredit":120,"expiresAt":"2026-07-21T10:00:00Z","snapshot":{...EconomySnapshot}}}` |
+| GET `/api/economy/shop/catalog?shopId=general_merchant` | Header：`X-Account-Id: 1`, `X-Character-Id: 10` | `{"ok":true,"data":{"shopId":"general_merchant","businessDate":"2026-07-16","nextResetAt":"...","items":[{"slotIndex":1,"itemId":"shadow_iron","dailyLimit":200,"remainingToday":200,"available":true}]}}` |
 | POST `/api/economy/shop/buy` | Header：`X-Account-Id: 1`；Body：`{"opId":"shop-buy-01","characterId":10,"shopId":"town-general","itemId":"health_potion","quantity":2}` | 金币商品：`{"ok":true,"data":{"snapshot":{...EconomySnapshot}}}`；链上商品：`{"ok":true,"data":{"order":{...PaymentOrder,"purpose":"SHOP_BUY"}}}` |
 | POST `/api/economy/shop/sell` | 普通物品：`{"opId":"shop-sell-01","characterId":10,"shopId":"town-general","slotIndex":3,"quantity":1}`；装备：`{"opId":"shop-sell-eq-01","characterId":10,"shopId":"town-general","equipmentUid":"eq_abc"}` | `{"ok":true,"data":{"snapshot":{...EconomySnapshot}}}` |
 | POST `/api/economy/lottery/draw` | Header：`X-Account-Id: 1`；Body：`{"opId":"lottery-01","characterId":10,"count":10}` | `{"ok":true,"data":{"order":{...PaymentOrder,"purpose":"LOTTERY_DRAW","amount":300},"rewards":{"IsBoss":false,"Items":[{"RewardType":"item","ItemID":"iron_ore","Quantity":5}],"TokenReward":0}}}` |

@@ -214,7 +214,7 @@ Query：
 - `economy`：只读经济快照，字段复用 `EconomySnapshot`：`inventory`、`warehouse`、`lootTray`、`equipmentItems`、`accountToken` 等。
 - `online`：`online`、`serverId?`、`connectionId?`、`sessionId?`、`lastSeenAt?`。
 
-装备项包含 `equipmentUid`、`itemId`、`rarity`、`enhanceLevel`、`durability`、`maxDurability`、`status`、`equipSlot`、`slot`、`affixes`、`nftStatus?`。
+装备项包含 `equipmentUid`、`itemId`、`rarity`、`enhanceLevel`、`durability`、`maxDurability`、`status`、`equipSlot`、`slot`、`weaponType`、`weaponTypeKey`、`affixes`、`nftStatus?`。
 
 ### GET `/api/admin/characters/{characterId}/ledger`
 
@@ -243,7 +243,7 @@ Query：
 
 按装备 UID 查询装备归属、当前位置、NFT 和市场状态。成功返回：
 
-- `equipment`：`EquipmentItem` 字段，包括 `equipmentUid`、`itemId`、`rarity`、`enhanceLevel`、`durability`、`maxDurability`、`status`、`equipSlot`、`slot`、`affixes`、`nftStatus?`。
+- `equipment`：`EquipmentItem` 字段，包括 `equipmentUid`、`itemId`、`rarity`、`enhanceLevel`、`durability`、`maxDurability`、`status`、`equipSlot`、`slot`、`weaponType`、`weaponTypeKey`、`affixes`、`nftStatus?`。
 - `owner`：`accountId`、`characterId?`、`characterName?`、`walletAddress`、`accountStatus`。
 - `nft?`：最近 NFT Asset / Mint Request 状态，包含 `assetId?`、`status?`、`mintAddress?`、`metadataUri?`、`requestId?`、`requestStatus?`、时间戳等。
 - `marketplace?`：该装备最近一条 Marketplace Listing，包含价格、状态、卖方和创建/成交/取消时间。
@@ -263,7 +263,7 @@ Query：
 
 成功返回当前生效 Economy 配置生成的目录：`configVersion`、`items` 或 `groups`、`categories`、`count`、`total`、`limit`、`offset`。
 
-目录项包含 `itemId`、`displayName`、`category`、`categoryLabel`、`rarity`、`rarityLabel`、`isEquipment`、`equipmentSlot`、`equipmentSlotLabel`、`seriesId?`、`stage?`、`displayType?`、`stackable`、`maxGrantQuantity`、`enabledForAdminGrant`。装备类 `maxGrantQuantity=1`，用于和发奖/补偿接口的装备数量校验保持一致。
+目录项包含 `itemId`、`displayName`、`category`、`categoryLabel`、`rarity`、`rarityLabel`、`isEquipment`、`equipmentSlot`、`equipmentSlotLabel`、`weaponType?`、`weaponTypeKey?`、`seriesId?`、`stage?`、`displayType?`、`stackable`、`maxGrantQuantity`、`enabledForAdminGrant`。装备类 `maxGrantQuantity=1`，用于和发奖/补偿接口的装备数量校验保持一致。
 
 ## 6. Marketplace 限制
 

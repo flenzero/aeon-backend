@@ -72,8 +72,26 @@ func TestLoadDirBuildsLiveEquipmentAndOperationsConfiguration(t *testing.T) {
 	if len(cfg.Equipment.ByItemID) != 70 {
 		t.Fatalf("equipment templates = %d, want 70", len(cfg.Equipment.ByItemID))
 	}
-	if cfg.Shops == nil || len(cfg.Shops) != 0 {
-		t.Fatalf("default shops should be configured but empty: %+v", cfg.Shops)
+	mystery, ok := cfg.Shop("mystery_merchant")
+	if !ok || mystery.Mystery == nil {
+		t.Fatalf("mystery shop should be configured: %+v", cfg.Shops)
+	}
+	if mystery.Mystery.MaxSlots != 4 || mystery.Mystery.ManualRefreshTokenBaseCost != 10 || mystery.Mystery.ManualRefreshTokenStepCost != 5 || mystery.Mystery.ManualRefreshTokenMaxCost != 50 {
+		t.Fatalf("mystery shop timing/slots=%+v", mystery.Mystery)
+	}
+	general, ok := cfg.Shop("general_merchant")
+	if !ok || len(general.SellItems) == 0 {
+		t.Fatalf("general merchant should be configured: %+v", cfg.Shops)
+	}
+	if general.SellItems[0].SlotIndex != 1 || general.SellItems[0].DailyLimit <= 0 {
+		t.Fatalf("general merchant first slot=%+v", general.SellItems[0])
+	}
+	equipmentShop, ok := cfg.Shop("equipment_merchant")
+	if !ok || len(equipmentShop.SellItems) != 42 {
+		t.Fatalf("equipment merchant should have 42 blue equipment entries: %+v", equipmentShop.SellItems)
+	}
+	if equipmentShop.SellItems[0].Rarity != 3 || equipmentShop.SellItems[0].DailyLimit != 1 {
+		t.Fatalf("equipment merchant first slot=%+v", equipmentShop.SellItems[0])
 	}
 	axe, ok := cfg.EquipmentTemplate("ashbound_axe_t1")
 	if !ok {
@@ -81,6 +99,32 @@ func TestLoadDirBuildsLiveEquipmentAndOperationsConfiguration(t *testing.T) {
 	}
 	if axe.BaseFlat["attack"] != 12 || axe.BasePercent["attackSpeed"] != -0.08 {
 		t.Fatalf("axe template=%+v", axe)
+	}
+	if axe.EquipSlot != 0 || axe.WeaponType != WeaponTypeAxe || axe.WeaponTypeKey != "axe" {
+		t.Fatalf("axe slot/weapon type=%+v", axe)
+	}
+	slotCases := map[string]int{
+		"ashbound_sword_t1":     0,
+		"ashbound_helmet_t1":    1,
+		"ashbound_chest_t1":     2,
+		"ashbound_cloak_t1":     3,
+		"ashbound_gloves_t1":    4,
+		"ashbound_accessory_t1": 5,
+		"ashbound_shoes_t1":     6,
+	}
+	for itemID, wantSlot := range slotCases {
+		template, ok := cfg.EquipmentTemplate(itemID)
+		if !ok {
+			t.Fatalf("%s template missing", itemID)
+		}
+		if template.EquipSlot != wantSlot {
+			t.Fatalf("%s equipSlot = %d, want %d", itemID, template.EquipSlot, wantSlot)
+		}
+	}
+	for _, mount := range cfg.Equipment.Mounts {
+		if mount.EquipSlot != 7 {
+			t.Fatalf("%s equipSlot = %d, want 7", mount.ItemID, mount.EquipSlot)
+		}
 	}
 	purple, ok := cfg.EquipmentRarity(4)
 	if !ok || purple.AffixCount != 4 || purple.Multiplier != 1.4 {
@@ -162,6 +206,9 @@ func TestNewEquipmentUsesSemanticAffixesAndLiveResolution(t *testing.T) {
 	if resolved.BaseFlat["attack"] != 23.4 || resolved.BasePercent["attackSpeed"] != -0.08 {
 		t.Fatalf("axe base stats = %+v", resolved)
 	}
+	if resolved.WeaponType != WeaponTypeAxe || resolved.WeaponTypeKey != "axe" {
+		t.Fatalf("axe weapon type = %+v", resolved)
+	}
 	if resolved.Affixes[0].Value <= 0 || resolved.Affixes[0].EnhanceHits != 2 {
 		t.Fatalf("enhanced affix = %+v", resolved.Affixes[0])
 	}
@@ -171,6 +218,16 @@ func TestNewEquipmentUsesSemanticAffixesAndLiveResolution(t *testing.T) {
 	}
 	if !mount.IsMount || mount.FinalBonuses["finalAttack"] != 0.05 || mount.FinalBonuses["moveSpeed"] != 0.25 {
 		t.Fatalf("mount resolution = %+v", mount)
+	}
+	if mount.WeaponType != WeaponTypeNone || mount.WeaponTypeKey != "none" {
+		t.Fatalf("mount weapon type = %+v", mount)
+	}
+	legacy, err := cfg.ResolveEquipmentItem(store.EquipmentItem{ItemID: "rusted_saber", Rarity: 1})
+	if err != nil {
+		t.Fatalf("resolve legacy weapon: %v", err)
+	}
+	if legacy.WeaponType != WeaponTypeSword || legacy.WeaponTypeKey != "sword" {
+		t.Fatalf("legacy weapon type = %+v", legacy)
 	}
 }
 

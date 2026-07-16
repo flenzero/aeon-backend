@@ -55,7 +55,7 @@ func newHandler(cfg config.Config, st store.Repository, strict bool) (*Handler, 
 	}
 	handler := &Handler{
 		cfg:     cfg,
-		service: NewServiceWithCache(st, cache, cfg.JWTSecret, cfg.SessionTTLHours, cfg.OnlinePresenceTTLSec),
+		service: NewServiceWithCache(st, cache, cfg.JWTSecret, cfg.SessionTTLHours, cfg.OnlinePresenceTTLSec).LoadEconomyRules(cfg.EconomyConfigDir),
 		store:   st,
 		cache:   cache,
 		ready:   readiness.New(cfg.ServiceName, checks...),
@@ -262,7 +262,7 @@ func (h *Handler) characterList(w http.ResponseWriter, r *http.Request) {
 		httpx.Error(w, http.StatusBadRequest, 2006, err.Error())
 		return
 	}
-	httpx.OK(w, map[string]any{"characters": h.store.Characters(accountID)})
+	httpx.OK(w, map[string]any{"characters": h.service.Characters(accountID)})
 }
 
 func (h *Handler) characterCreate(w http.ResponseWriter, r *http.Request) {

@@ -91,7 +91,7 @@ ops/start-infra.sh
 ops/migrate-db.sh bootstrap
 
 # 6. 启动三个 API
-ops/deploy.sh account-api economy-api admin-api
+ops/deploy.sh
 
 # 7. 注册 economy-worker 的 service identity 后，再启动 worker
 ops/deploy.sh economy-worker
@@ -135,16 +135,20 @@ ops/migrate-db.sh up
 ```bash
 cd /aeon/aeonblight-server
 ops/load-images.sh
-ops/deploy.sh account-api economy-api admin-api economy-worker
+ops/deploy.sh
 ops/healthcheck.sh
 ```
+
+`ops/deploy.sh` 不带参数时默认只重建最常用的三个 API：`account-api`、`economy-api`、`admin-api`。如果要更新 `economy-worker` 或指定服务，显式传服务名。
+需要重建全部 compose 服务时，使用 `ops/deploy.sh all`。
 
 如果本次发布包含数据库变更，在启动应用前执行：
 
 ```bash
 ops/start-infra.sh
 ops/migrate-db.sh up
-ops/deploy.sh account-api economy-api admin-api economy-worker
+ops/deploy.sh
+ops/deploy.sh economy-worker
 ops/healthcheck.sh
 ```
 
@@ -181,8 +185,10 @@ ops/configure-nginx.sh ssl
 ## 日常运维
 
 ```bash
-ops/deploy.sh                         # 启动或更新所有 compose 服务
-ops/deploy.sh economy-api             # 启动或更新一个服务
+ops/deploy.sh                         # 启动或更新三个常用 API：account-api、economy-api、admin-api
+ops/deploy.sh all                     # 启动或更新全部 compose 服务
+ops/deploy.sh economy-api             # 启动或更新一个指定服务
+ops/deploy.sh economy-worker          # 启动或更新 worker
 ops/load-images.sh                    # 上传新发布包后，先加载新镜像
 ops/start.sh                          # 启动所有 compose 服务
 ops/start.sh account-api              # 启动一个服务

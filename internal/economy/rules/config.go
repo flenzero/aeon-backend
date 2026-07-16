@@ -32,6 +32,22 @@ type Config struct {
 	Bounties    BountyConfig
 }
 
+const (
+	WeaponTypeNone  = 0
+	WeaponTypeSword = 1
+	WeaponTypeAxe   = 2
+	WeaponTypeBow   = 3
+	WeaponTypeStaff = 4
+)
+
+var weaponTypeKeys = map[string]int{
+	"none":  WeaponTypeNone,
+	"sword": WeaponTypeSword,
+	"axe":   WeaponTypeAxe,
+	"bow":   WeaponTypeBow,
+	"staff": WeaponTypeStaff,
+}
+
 type Item struct {
 	ItemID          string `json:"itemId"`
 	DisplayName     string `json:"displayName"`
@@ -40,19 +56,95 @@ type Item struct {
 	MaxStack        int64  `json:"maxStack"`
 	IsEquipment     bool   `json:"isEquipment"`
 	EquipSlot       int    `json:"equipSlot"`
+	WeaponType      int    `json:"weaponType"`
+	WeaponTypeKey   string `json:"weaponTypeKey"`
 	Tradable        bool   `json:"tradable"`
 	DefaultBindType string `json:"defaultBindType"`
 	BuyCurrency     int    `json:"buyCurrency"`
 	BuyPrice        int64  `json:"buyPrice"`
 	SellPrice       int64  `json:"sellPrice"`
 	GrantGold       int64  `json:"grantGold"`
+	GrantLockedAEB  int64  `json:"grantLockedAeb"`
 }
 
 type Shop struct {
-	ShopID       string   `json:"shopId"`
-	DisplayName  string   `json:"displayName"`
-	SellAllItems bool     `json:"sellAllItems"`
-	SellItems    []string `json:"sellItems"`
+	ShopID             string             `json:"shopId"`
+	DisplayName        string             `json:"displayName"`
+	DailyLimitTimezone string             `json:"dailyLimitTimezone,omitempty"`
+	SellAllItems       bool               `json:"sellAllItems"`
+	SellItems          []ShopSellItem     `json:"sellItems"`
+	Mystery            *MysteryShopConfig `json:"mystery,omitempty"`
+}
+
+type ShopSellItem struct {
+	SlotIndex  int    `json:"slotIndex,omitempty"`
+	ItemID     string `json:"itemId"`
+	MinLevel   int    `json:"minLevel,omitempty"`
+	MaxLevel   int    `json:"maxLevel,omitempty"`
+	Rarity     int    `json:"rarity,omitempty"`
+	BuyPrice   int64  `json:"buyPrice,omitempty"`
+	DailyLimit int64  `json:"dailyLimit,omitempty"`
+}
+
+func (item *ShopSellItem) UnmarshalJSON(data []byte) error {
+	var id string
+	if err := json.Unmarshal(data, &id); err == nil {
+		item.ItemID = id
+		return nil
+	}
+	var row struct {
+		SlotIndex  int    `json:"slotIndex"`
+		ItemID     string `json:"itemId"`
+		MinLevel   int    `json:"minLevel"`
+		MaxLevel   int    `json:"maxLevel"`
+		Rarity     int    `json:"rarity"`
+		BuyPrice   int64  `json:"buyPrice"`
+		DailyLimit int64  `json:"dailyLimit"`
+	}
+	if err := json.Unmarshal(data, &row); err != nil {
+		return err
+	}
+	item.SlotIndex = row.SlotIndex
+	item.ItemID = row.ItemID
+	item.MinLevel = row.MinLevel
+	item.MaxLevel = row.MaxLevel
+	item.Rarity = row.Rarity
+	item.BuyPrice = row.BuyPrice
+	item.DailyLimit = row.DailyLimit
+	return nil
+}
+
+type MysteryShopConfig struct {
+	ManualRefreshTokenBaseCost int64             `json:"manualRefreshTokenBaseCost"`
+	ManualRefreshTokenStepCost int64             `json:"manualRefreshTokenStepCost"`
+	ManualRefreshTokenMaxCost  int64             `json:"manualRefreshTokenMaxCost"`
+	DailyLimitTimezone         string            `json:"dailyLimitTimezone"`
+	MaxSlots                   int               `json:"maxSlots"`
+	Slots                      []MysteryShopSlot `json:"slots"`
+	Discounts                  []MysteryDiscount `json:"discounts"`
+}
+
+type MysteryShopSlot struct {
+	SlotIndex   int                    `json:"slotIndex"`
+	UnlockLevel int                    `json:"unlockLevel"`
+	Pools       []MysteryShopPoolEntry `json:"pools"`
+}
+
+type MysteryShopPoolEntry struct {
+	ItemID      string `json:"itemId"`
+	Weight      int    `json:"weight"`
+	Quantity    int64  `json:"quantity"`
+	Rarity      int    `json:"rarity"`
+	MinLevel    int    `json:"minLevel,omitempty"`
+	MaxLevel    int    `json:"maxLevel,omitempty"`
+	BaseGold    int64  `json:"baseGold"`
+	BaseToken   int64  `json:"baseToken"`
+	MinDiscount int    `json:"minDiscount"`
+}
+
+type MysteryDiscount struct {
+	Bps    int `json:"bps"`
+	Weight int `json:"weight"`
 }
 
 // EquipmentConfig defines the live, config-derived equipment model. Equipment
@@ -83,13 +175,15 @@ type EquipmentRarity struct {
 }
 
 type EquipmentSeries struct {
-	SeriesID    string                   `json:"seriesId"`
-	EquipSlot   int                      `json:"equipSlot"`
-	Category    string                   `json:"category"`
-	DisplayType string                   `json:"displayType"`
-	AffixPoolID string                   `json:"affixPoolId"`
-	BaseFlat    map[string]float64       `json:"baseFlat"`
-	Stages      []EquipmentStageTemplate `json:"stages"`
+	SeriesID      string                   `json:"seriesId"`
+	EquipSlot     int                      `json:"equipSlot"`
+	Category      string                   `json:"category"`
+	WeaponType    int                      `json:"weaponType"`
+	WeaponTypeKey string                   `json:"weaponTypeKey"`
+	DisplayType   string                   `json:"displayType"`
+	AffixPoolID   string                   `json:"affixPoolId"`
+	BaseFlat      map[string]float64       `json:"baseFlat"`
+	Stages        []EquipmentStageTemplate `json:"stages"`
 }
 
 type EquipmentStageTemplate struct {
@@ -106,6 +200,8 @@ type EquipmentTemplate struct {
 	Stage          int                `json:"stage"`
 	EquipSlot      int                `json:"equipSlot"`
 	Category       string             `json:"category"`
+	WeaponType     int                `json:"weaponType"`
+	WeaponTypeKey  string             `json:"weaponTypeKey"`
 	DisplayName    string             `json:"displayName"`
 	AffixPoolID    string             `json:"affixPoolId"`
 	BaseFlat       map[string]float64 `json:"baseFlat"`
@@ -297,15 +393,17 @@ type AffixConfig struct {
 // ResolvedEquipment is the public, current-configuration view of an equipment
 // instance. None of its numeric fields are stored in equipment_items.
 type ResolvedEquipment struct {
-	ItemID       string                   `json:"itemId"`
-	Rarity       int                      `json:"rarity"`
-	IsMount      bool                     `json:"isMount"`
-	BaseFlat     map[string]float64       `json:"baseFlat,omitempty"`
-	BasePercent  map[string]float64       `json:"basePercent,omitempty"`
-	Affixes      []ResolvedEquipmentAffix `json:"affixes,omitempty"`
-	TotalFlat    map[string]float64       `json:"totalFlat,omitempty"`
-	TotalPercent map[string]float64       `json:"totalPercent,omitempty"`
-	FinalBonuses map[string]float64       `json:"finalBonuses,omitempty"`
+	ItemID        string                   `json:"itemId"`
+	Rarity        int                      `json:"rarity"`
+	IsMount       bool                     `json:"isMount"`
+	WeaponType    int                      `json:"weaponType"`
+	WeaponTypeKey string                   `json:"weaponTypeKey"`
+	BaseFlat      map[string]float64       `json:"baseFlat,omitempty"`
+	BasePercent   map[string]float64       `json:"basePercent,omitempty"`
+	Affixes       []ResolvedEquipmentAffix `json:"affixes,omitempty"`
+	TotalFlat     map[string]float64       `json:"totalFlat,omitempty"`
+	TotalPercent  map[string]float64       `json:"totalPercent,omitempty"`
+	FinalBonuses  map[string]float64       `json:"finalBonuses,omitempty"`
 }
 
 type ResolvedEquipmentAffix struct {
@@ -749,6 +847,12 @@ func (c *Config) loadShops() error {
 		if _, exists := c.Shops[row.ShopID]; exists {
 			return fmt.Errorf("shops.json contains duplicate shopId %q", row.ShopID)
 		}
+		if row.Mystery == nil && strings.TrimSpace(row.DailyLimitTimezone) == "" {
+			row.DailyLimitTimezone = "Asia/Shanghai"
+		}
+		if row.Mystery != nil && strings.TrimSpace(row.Mystery.DailyLimitTimezone) == "" {
+			row.Mystery.DailyLimitTimezone = "Asia/Shanghai"
+		}
 		c.Shops[row.ShopID] = row
 	}
 	return nil
@@ -764,7 +868,19 @@ func (c *Config) loadEquipment() error {
 	}
 	c.Equipment.ByItemID = map[string]EquipmentTemplate{}
 	for _, series := range c.Equipment.Series {
-		if strings.TrimSpace(series.SeriesID) == "" || series.EquipSlot < 0 || len(series.BaseFlat) == 0 {
+		series.SeriesID = strings.TrimSpace(series.SeriesID)
+		series.Category = strings.TrimSpace(series.Category)
+		series.WeaponTypeKey = strings.TrimSpace(series.WeaponTypeKey)
+		weaponType := WeaponTypeNone
+		weaponTypeKey := "none"
+		if series.Category == "weapon" {
+			var ok bool
+			weaponType, weaponTypeKey, ok = normalizeWeaponType(series.WeaponType, series.WeaponTypeKey)
+			if !ok || weaponType == WeaponTypeNone {
+				return fmt.Errorf("weapon equipment series %q has invalid weaponType/weaponTypeKey", series.SeriesID)
+			}
+		}
+		if series.SeriesID == "" || series.EquipSlot < 0 || len(series.BaseFlat) == 0 {
 			return errors.New("equipment_templates.json contains an incomplete equipment series")
 		}
 		for _, stage := range series.Stages {
@@ -782,13 +898,14 @@ func (c *Config) loadEquipment() error {
 			template := EquipmentTemplate{
 				ItemID: itemID, SeriesID: series.SeriesID, Stage: stage.Stage,
 				EquipSlot: series.EquipSlot, Category: series.Category,
+				WeaponType: weaponType, WeaponTypeKey: weaponTypeKey,
 				DisplayName: strings.TrimSpace(stage.Prefix) + strings.TrimSpace(series.DisplayType),
 				AffixPoolID: series.AffixPoolID, BaseFlat: series.BaseFlat,
 				BasePercent: stage.BasePercent, NPCRecycleGold: npcRecycleGold,
 			}
 			c.Equipment.ByItemID[itemID] = template
 			if _, exists := c.Items[itemID]; !exists {
-				c.Items[itemID] = Item{ItemID: itemID, DisplayName: template.DisplayName, Category: series.Category, Rarity: 1, MaxStack: 1, IsEquipment: true, EquipSlot: series.EquipSlot, Tradable: true, DefaultBindType: "UNBOUND"}
+				c.Items[itemID] = Item{ItemID: itemID, DisplayName: template.DisplayName, Category: series.Category, Rarity: 1, MaxStack: 1, IsEquipment: true, EquipSlot: series.EquipSlot, WeaponType: template.WeaponType, WeaponTypeKey: template.WeaponTypeKey, Tradable: true, DefaultBindType: "UNBOUND"}
 			}
 		}
 	}
@@ -798,7 +915,7 @@ func (c *Config) loadEquipment() error {
 			return errors.New("equipment_templates.json contains an incomplete mount")
 		}
 		if _, exists := c.Items[mount.ItemID]; !exists {
-			c.Items[mount.ItemID] = Item{ItemID: mount.ItemID, DisplayName: mount.DisplayName, Category: "mount", Rarity: 5, MaxStack: 1, IsEquipment: true, EquipSlot: mount.EquipSlot, Tradable: true, DefaultBindType: "UNBOUND"}
+			c.Items[mount.ItemID] = Item{ItemID: mount.ItemID, DisplayName: mount.DisplayName, Category: "mount", Rarity: 5, MaxStack: 1, IsEquipment: true, EquipSlot: mount.EquipSlot, WeaponType: WeaponTypeNone, WeaponTypeKey: "none", Tradable: true, DefaultBindType: "UNBOUND"}
 		}
 	}
 	return nil
@@ -828,22 +945,27 @@ func (c *Config) Shop(shopID string) (Shop, bool) {
 }
 
 func (shop Shop) SellsItem(itemID string) bool {
-	itemID = strings.TrimSpace(itemID)
-	if itemID == "" {
-		return false
-	}
-	if shop.SellAllItems {
-		return true
-	}
-	for _, candidate := range shop.SellItems {
-		if strings.TrimSpace(candidate) == itemID {
-			return true
-		}
-	}
-	return false
+	_, ok := shop.SellItem(itemID)
+	return ok
 }
 
-func (c *Config) ShopPurchasePlan(opID string, characterID int64, itemID string, quantity int64) (store.DungeonRewardPlan, error) {
+func (shop Shop) SellItem(itemID string) (ShopSellItem, bool) {
+	itemID = strings.TrimSpace(itemID)
+	if itemID == "" {
+		return ShopSellItem{}, false
+	}
+	if shop.SellAllItems {
+		return ShopSellItem{ItemID: itemID}, true
+	}
+	for _, candidate := range shop.SellItems {
+		if strings.TrimSpace(candidate.ItemID) == itemID {
+			return candidate, true
+		}
+	}
+	return ShopSellItem{}, false
+}
+
+func (c *Config) ShopPurchasePlan(opID string, characterID int64, itemID string, quantity int64, rarityOverride int) (store.DungeonRewardPlan, error) {
 	item, ok := c.Items[strings.TrimSpace(itemID)]
 	if !ok {
 		return store.DungeonRewardPlan{}, fmt.Errorf("unknown item %q", itemID)
@@ -853,6 +975,9 @@ func (c *Config) ShopPurchasePlan(opID string, characterID int64, itemID string,
 	}
 	if item.GrantGold > 0 {
 		return store.DungeonRewardPlan{}, nil
+	}
+	if item.GrantLockedAEB > 0 {
+		return store.DungeonRewardPlan{TokenReward: item.GrantLockedAEB * quantity}, nil
 	}
 	category := strings.TrimSpace(item.Category)
 	if category == "" {
@@ -867,9 +992,12 @@ func (c *Config) ShopPurchasePlan(opID string, characterID int64, itemID string,
 			Category:   category,
 		}}}, nil
 	}
-	rarity := item.Rarity
+	rarity := rarityOverride
 	if rarity <= 0 {
-		rarity = 1
+		rarity = item.Rarity
+		if rarity <= 0 {
+			rarity = 1
+		}
 	}
 	plan := store.DungeonRewardPlan{Items: make([]store.DungeonRewardGrant, 0, quantity)}
 	for i := int64(0); i < quantity; i++ {
@@ -887,6 +1015,27 @@ func (c *Config) ShopPurchasePlan(opID string, characterID int64, itemID string,
 			EquipmentUID: equipmentUID(c.Rules.EquipmentUIDPrefix, opID, "shop", int(i), 0),
 			Affixes:      affixes,
 		})
+	}
+	return plan, nil
+}
+
+func (c *Config) MysteryShopPurchasePlan(opID string, characterID int64, offer store.MysteryShopOffer) (store.DungeonRewardPlan, error) {
+	itemID := strings.TrimSpace(offer.ItemID)
+	quantity := offer.Quantity
+	if quantity <= 0 {
+		quantity = 1
+	}
+	plan, err := c.ShopPurchasePlan(opID, characterID, itemID, quantity, 0)
+	if err != nil {
+		return store.DungeonRewardPlan{}, err
+	}
+	if offer.Rarity > 0 {
+		for index := range plan.Items {
+			if strings.EqualFold(plan.Items[index].RewardType, "equipment") {
+				plan.Items[index].Rarity = offer.Rarity
+				plan.Items[index].Affixes = c.rollEquipmentAffixes(rand.New(rand.NewPCG(seed(opID, "mystery", characterID, index, 0), 0x4cf5ad432745937f)), plan.Items[index].ItemID, offer.Rarity)
+			}
+		}
 	}
 	return plan, nil
 }
@@ -1224,21 +1373,105 @@ type recipeOutputJSON struct {
 
 func (c *Config) validate() error {
 	for itemID, item := range c.Items {
-		if item.BuyCurrency < 0 || item.BuyPrice < 0 || item.SellPrice < 0 || item.GrantGold < 0 {
+		if item.BuyCurrency < 0 || item.BuyPrice < 0 || item.SellPrice < 0 || item.GrantGold < 0 || item.GrantLockedAEB < 0 {
 			return fmt.Errorf("item %q has invalid shop pricing fields", itemID)
 		}
 		if item.BuyCurrency > 1 {
 			return fmt.Errorf("item %q has unsupported buyCurrency %d", itemID, item.BuyCurrency)
 		}
+		if item.WeaponType != 0 || strings.TrimSpace(item.WeaponTypeKey) != "" {
+			if _, _, ok := normalizeWeaponType(item.WeaponType, item.WeaponTypeKey); !ok {
+				return fmt.Errorf("item %q has invalid weaponType/weaponTypeKey", itemID)
+			}
+		}
 	}
 	for shopID, shop := range c.Shops {
-		for _, itemID := range shop.SellItems {
-			itemID = strings.TrimSpace(itemID)
+		seenSellSlots := map[int]bool{}
+		for _, sellItem := range shop.SellItems {
+			itemID := strings.TrimSpace(sellItem.ItemID)
 			if itemID == "" {
 				return fmt.Errorf("shop %q contains an empty sellItems entry", shopID)
 			}
 			if _, ok := c.Items[itemID]; !ok {
 				return fmt.Errorf("shop %q references unknown item %q", shopID, itemID)
+			}
+			if sellItem.MinLevel < 0 || sellItem.MaxLevel < 0 || sellItem.Rarity < 0 || sellItem.BuyPrice < 0 || sellItem.DailyLimit < 0 {
+				return fmt.Errorf("shop %q item %q has invalid sell item fields", shopID, itemID)
+			}
+			if shop.Mystery == nil {
+				if sellItem.SlotIndex <= 0 || sellItem.DailyLimit <= 0 {
+					return fmt.Errorf("shop %q item %q requires slotIndex and dailyLimit", shopID, itemID)
+				}
+				if seenSellSlots[sellItem.SlotIndex] {
+					return fmt.Errorf("shop %q duplicates slot %d", shopID, sellItem.SlotIndex)
+				}
+				seenSellSlots[sellItem.SlotIndex] = true
+			}
+			if sellItem.MaxLevel > 0 && sellItem.MinLevel > sellItem.MaxLevel {
+				return fmt.Errorf("shop %q item %q has invalid level range", shopID, itemID)
+			}
+			if sellItem.Rarity > 0 {
+				if _, ok := c.Equipment.Rarities[sellItem.Rarity]; !ok {
+					return fmt.Errorf("shop %q item %q has unknown rarity %d", shopID, itemID, sellItem.Rarity)
+				}
+			}
+		}
+		if shop.Mystery != nil {
+			if shop.Mystery.ManualRefreshTokenBaseCost < 0 || shop.Mystery.ManualRefreshTokenStepCost < 0 || shop.Mystery.ManualRefreshTokenMaxCost < 0 || shop.Mystery.MaxSlots <= 0 {
+				return fmt.Errorf("mystery shop %q has invalid refresh cost or maxSlots", shopID)
+			}
+			if shop.Mystery.ManualRefreshTokenMaxCost > 0 && shop.Mystery.ManualRefreshTokenMaxCost < shop.Mystery.ManualRefreshTokenBaseCost {
+				return fmt.Errorf("mystery shop %q has invalid refresh max cost", shopID)
+			}
+			if strings.TrimSpace(shop.Mystery.DailyLimitTimezone) == "" {
+				shop.Mystery.DailyLimitTimezone = "Asia/Shanghai"
+			}
+			if len(shop.Mystery.Slots) == 0 || len(shop.Mystery.Slots) > shop.Mystery.MaxSlots {
+				return fmt.Errorf("mystery shop %q has invalid slot count", shopID)
+			}
+			discountWeight := 0
+			for _, discount := range shop.Mystery.Discounts {
+				if discount.Bps <= 0 || discount.Bps > 10000 || discount.Weight <= 0 {
+					return fmt.Errorf("mystery shop %q has invalid discount", shopID)
+				}
+				discountWeight += discount.Weight
+			}
+			if discountWeight <= 0 {
+				return fmt.Errorf("mystery shop %q requires discount weights", shopID)
+			}
+			seenSlots := map[int]bool{}
+			for _, slot := range shop.Mystery.Slots {
+				if slot.SlotIndex <= 0 || slot.SlotIndex > shop.Mystery.MaxSlots || slot.UnlockLevel < 0 || len(slot.Pools) == 0 {
+					return fmt.Errorf("mystery shop %q has invalid slot %d", shopID, slot.SlotIndex)
+				}
+				if seenSlots[slot.SlotIndex] {
+					return fmt.Errorf("mystery shop %q duplicates slot %d", shopID, slot.SlotIndex)
+				}
+				seenSlots[slot.SlotIndex] = true
+				poolWeight := 0
+				for _, entry := range slot.Pools {
+					itemID := strings.TrimSpace(entry.ItemID)
+					if itemID == "" || entry.Weight <= 0 || entry.Quantity <= 0 {
+						return fmt.Errorf("mystery shop %q slot %d has invalid pool entry", shopID, slot.SlotIndex)
+					}
+					if entry.BaseGold <= 0 && entry.BaseToken <= 0 {
+						return fmt.Errorf("mystery shop %q slot %d item %q requires a price", shopID, slot.SlotIndex, itemID)
+					}
+					item, ok := c.Items[itemID]
+					if !ok {
+						return fmt.Errorf("mystery shop %q slot %d references unknown item %q", shopID, slot.SlotIndex, itemID)
+					}
+					if mysteryEntryRequiresToken(item, itemID) && entry.BaseToken <= 0 {
+						return fmt.Errorf("mystery shop %q slot %d item %q must use token pricing", shopID, slot.SlotIndex, itemID)
+					}
+					if entry.MinDiscount < 0 || entry.MinDiscount > 10000 {
+						return fmt.Errorf("mystery shop %q slot %d item %q has invalid minDiscount", shopID, slot.SlotIndex, itemID)
+					}
+					poolWeight += entry.Weight
+				}
+				if poolWeight <= 0 {
+					return fmt.Errorf("mystery shop %q slot %d requires positive pool weight", shopID, slot.SlotIndex)
+				}
 			}
 		}
 	}
@@ -1272,7 +1505,7 @@ func (c *Config) validate() error {
 		}
 	}
 	for _, mount := range c.Equipment.Mounts {
-		if mount.EquipSlot != 6 || mount.FinalHPBps != 500 || mount.FinalAtkBps != 500 || mount.MoveSpeedBps != 2500 {
+		if mount.EquipSlot != 7 || mount.FinalHPBps != 500 || mount.FinalAtkBps != 500 || mount.MoveSpeedBps != 2500 {
 			return fmt.Errorf("mount %q must use the fixed current mount bonuses", mount.ItemID)
 		}
 	}
@@ -1457,6 +1690,22 @@ func (c *Config) validate() error {
 	return nil
 }
 
+func mysteryEntryRequiresToken(item Item, itemID string) bool {
+	category := strings.TrimSpace(item.Category)
+	if item.Rarity >= 3 {
+		return true
+	}
+	if category == "boss_ticket" || category == "aeb_voucher" {
+		return true
+	}
+	itemID = strings.TrimSpace(itemID)
+	return strings.HasPrefix(itemID, "enhancement_stone_t10") ||
+		strings.HasPrefix(itemID, "enhancement_stone_t15") ||
+		strings.HasPrefix(itemID, "enhancement_stone_t20") ||
+		strings.HasPrefix(itemID, "enhancement_stone_t25") ||
+		strings.HasPrefix(itemID, "enhancement_stone_t30")
+}
+
 func validateWeights[K ~string | ~int](rows map[K]int) error {
 	total := 0
 	for _, weight := range rows {
@@ -1469,6 +1718,24 @@ func validateWeights[K ~string | ~int](rows map[K]int) error {
 		return errors.New("at least one weight must be positive")
 	}
 	return nil
+}
+
+func normalizeWeaponType(value int, key string) (int, string, bool) {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		key = "none"
+	}
+	keyValue, ok := weaponTypeKeys[key]
+	if !ok {
+		return 0, "", false
+	}
+	if value == 0 {
+		value = keyValue
+	}
+	if value != keyValue {
+		return 0, "", false
+	}
+	return value, key, true
 }
 
 func (c *Config) rollAffixes(rng *rand.Rand, affixPoolID string) []store.EquipmentAffix {
@@ -1543,7 +1810,7 @@ func (c *Config) ResolveEquipment(itemID string, rarity int, affixes []store.Equ
 	for _, mount := range c.Equipment.Mounts {
 		if mount.ItemID == itemID {
 			return ResolvedEquipment{
-				ItemID: itemID, Rarity: 5, IsMount: true,
+				ItemID: itemID, Rarity: 5, IsMount: true, WeaponType: WeaponTypeNone, WeaponTypeKey: "none",
 				FinalBonuses: map[string]float64{"finalMaxHp": float64(mount.FinalHPBps) / 10000, "finalAttack": float64(mount.FinalAtkBps) / 10000, "moveSpeed": float64(mount.MoveSpeedBps) / 10000},
 			}, nil
 		}
@@ -1558,7 +1825,7 @@ func (c *Config) ResolveEquipment(itemID string, rarity int, affixes []store.Equ
 	}
 	stageMultiplier := c.Equipment.StageMultipliers[template.Stage]
 	resolved := ResolvedEquipment{
-		ItemID: itemID, Rarity: rarity,
+		ItemID: itemID, Rarity: rarity, WeaponType: template.WeaponType, WeaponTypeKey: template.WeaponTypeKey,
 		BaseFlat: map[string]float64{}, BasePercent: cloneStats(template.BasePercent),
 		TotalFlat: map[string]float64{}, TotalPercent: cloneStats(template.BasePercent),
 		Affixes: make([]ResolvedEquipmentAffix, 0, len(affixes)),
@@ -1605,6 +1872,9 @@ func (c *Config) ResolveEquipment(itemID string, rarity int, affixes []store.Equ
 // contain display values, but persistence always receives the original
 // semantic form produced by rollEquipmentAffixes.
 func (c *Config) ResolveEquipmentItem(item store.EquipmentItem) (store.EquipmentItem, error) {
+	if item.WeaponTypeKey == "" {
+		item.WeaponTypeKey = "none"
+	}
 	if _, template := c.EquipmentTemplate(item.ItemID); !template {
 		isMount := false
 		for _, mount := range c.Equipment.Mounts {
@@ -1614,6 +1884,12 @@ func (c *Config) ResolveEquipmentItem(item store.EquipmentItem) (store.Equipment
 			}
 		}
 		if !isMount {
+			if itemDef, ok := c.Items[item.ItemID]; ok {
+				if weaponType, weaponTypeKey, ok := normalizeWeaponType(itemDef.WeaponType, itemDef.WeaponTypeKey); ok && weaponType != WeaponTypeNone {
+					item.WeaponType = weaponType
+					item.WeaponTypeKey = weaponTypeKey
+				}
+			}
 			return item, nil // legacy equipment keeps its legacy payload.
 		}
 	}
@@ -1626,6 +1902,8 @@ func (c *Config) ResolveEquipmentItem(item store.EquipmentItem) (store.Equipment
 	item.ResolvedFlatStats = resolved.TotalFlat
 	item.ResolvedPercentStats = resolved.TotalPercent
 	item.FinalBonuses = resolved.FinalBonuses
+	item.WeaponType = resolved.WeaponType
+	item.WeaponTypeKey = resolved.WeaponTypeKey
 	item.Affixes = make([]store.EquipmentAffix, 0, len(resolved.Affixes))
 	for _, affix := range resolved.Affixes {
 		item.Affixes = append(item.Affixes, store.EquipmentAffix{

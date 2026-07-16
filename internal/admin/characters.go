@@ -135,6 +135,7 @@ func (h *Handler) getCharacter(w http.ResponseWriter, r *http.Request) {
 		writeStoreErr(w, err)
 		return
 	}
+	detail.Economy = h.resolveEconomySnapshot(detail.Economy)
 	include := characterInclude(r.URL.Query().Get("include"))
 	data := map[string]any{"character": detail.Character}
 	if include["account"] {

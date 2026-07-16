@@ -1,3 +1,2083 @@
 {
-  "shops": []
+  "shops": [
+    {
+      "shopId": "general_merchant",
+      "displayName": "杂货商人",
+      "sellAllItems": false,
+      "sellItems": [
+        {
+          "slotIndex": 1,
+          "itemId": "shadow_iron",
+          "dailyLimit": 200
+        },
+        {
+          "slotIndex": 2,
+          "itemId": "gloomcap_spore",
+          "dailyLimit": 100
+        },
+        {
+          "slotIndex": 3,
+          "itemId": "emberroot_seed",
+          "dailyLimit": 50
+        },
+        {
+          "slotIndex": 4,
+          "itemId": "ashwood_white",
+          "dailyLimit": 200
+        },
+        {
+          "slotIndex": 5,
+          "itemId": "ashwood_green",
+          "dailyLimit": 100
+        },
+        {
+          "slotIndex": 6,
+          "itemId": "gloomstone_white",
+          "dailyLimit": 200
+        },
+        {
+          "slotIndex": 7,
+          "itemId": "gloomstone_green",
+          "dailyLimit": 100
+        },
+        {
+          "slotIndex": 8,
+          "itemId": "shadow_iron_white",
+          "dailyLimit": 200
+        },
+        {
+          "slotIndex": 9,
+          "itemId": "shadow_iron_green",
+          "dailyLimit": 100
+        },
+        {
+          "slotIndex": 10,
+          "itemId": "gloomcap_spore_white",
+          "dailyLimit": 200
+        },
+        {
+          "slotIndex": 11,
+          "itemId": "gloomcap_spore_green",
+          "dailyLimit": 100
+        },
+        {
+          "slotIndex": 12,
+          "itemId": "enhancement_stone_t1",
+          "dailyLimit": 10
+        },
+        {
+          "slotIndex": 13,
+          "itemId": "enhancement_stone_t5",
+          "dailyLimit": 8
+        }
+      ],
+      "dailyLimitTimezone": "Asia/Shanghai"
+    },
+    {
+      "shopId": "equipment_merchant",
+      "displayName": "装备商人",
+      "sellAllItems": false,
+      "sellItems": [
+        {
+          "slotIndex": 1,
+          "itemId": "ashbound_helmet_t1",
+          "minLevel": 0,
+          "maxLevel": 4,
+          "rarity": 3,
+          "buyPrice": 650,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 2,
+          "itemId": "gloomhide_helmet_t5",
+          "minLevel": 5,
+          "maxLevel": 9,
+          "rarity": 3,
+          "buyPrice": 1150,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 3,
+          "itemId": "shadowiron_helmet_t10",
+          "minLevel": 10,
+          "maxLevel": 14,
+          "rarity": 3,
+          "buyPrice": 2000,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 4,
+          "itemId": "nightglass_helmet_t15",
+          "minLevel": 15,
+          "maxLevel": 19,
+          "rarity": 3,
+          "buyPrice": 3400,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 5,
+          "itemId": "eclipseguard_helmet_t20",
+          "minLevel": 20,
+          "maxLevel": 24,
+          "rarity": 3,
+          "buyPrice": 5850,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 6,
+          "itemId": "voidforged_helmet_t25",
+          "minLevel": 25,
+          "maxLevel": 29,
+          "rarity": 3,
+          "buyPrice": 9950,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 7,
+          "itemId": "aeonblight_helmet_t30",
+          "minLevel": 30,
+          "maxLevel": 60,
+          "rarity": 3,
+          "buyPrice": 16850,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 8,
+          "itemId": "ashbound_chest_t1",
+          "minLevel": 0,
+          "maxLevel": 4,
+          "rarity": 3,
+          "buyPrice": 650,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 9,
+          "itemId": "gloomhide_chest_t5",
+          "minLevel": 5,
+          "maxLevel": 9,
+          "rarity": 3,
+          "buyPrice": 1150,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 10,
+          "itemId": "shadowiron_chest_t10",
+          "minLevel": 10,
+          "maxLevel": 14,
+          "rarity": 3,
+          "buyPrice": 2000,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 11,
+          "itemId": "nightglass_chest_t15",
+          "minLevel": 15,
+          "maxLevel": 19,
+          "rarity": 3,
+          "buyPrice": 3400,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 12,
+          "itemId": "eclipseguard_chest_t20",
+          "minLevel": 20,
+          "maxLevel": 24,
+          "rarity": 3,
+          "buyPrice": 5850,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 13,
+          "itemId": "voidforged_chest_t25",
+          "minLevel": 25,
+          "maxLevel": 29,
+          "rarity": 3,
+          "buyPrice": 9950,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 14,
+          "itemId": "aeonblight_chest_t30",
+          "minLevel": 30,
+          "maxLevel": 60,
+          "rarity": 3,
+          "buyPrice": 16850,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 15,
+          "itemId": "ashbound_gloves_t1",
+          "minLevel": 0,
+          "maxLevel": 4,
+          "rarity": 3,
+          "buyPrice": 650,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 16,
+          "itemId": "gloomhide_gloves_t5",
+          "minLevel": 5,
+          "maxLevel": 9,
+          "rarity": 3,
+          "buyPrice": 1150,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 17,
+          "itemId": "shadowiron_gloves_t10",
+          "minLevel": 10,
+          "maxLevel": 14,
+          "rarity": 3,
+          "buyPrice": 2000,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 18,
+          "itemId": "nightglass_gloves_t15",
+          "minLevel": 15,
+          "maxLevel": 19,
+          "rarity": 3,
+          "buyPrice": 3400,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 19,
+          "itemId": "eclipseguard_gloves_t20",
+          "minLevel": 20,
+          "maxLevel": 24,
+          "rarity": 3,
+          "buyPrice": 5850,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 20,
+          "itemId": "voidforged_gloves_t25",
+          "minLevel": 25,
+          "maxLevel": 29,
+          "rarity": 3,
+          "buyPrice": 9950,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 21,
+          "itemId": "aeonblight_gloves_t30",
+          "minLevel": 30,
+          "maxLevel": 60,
+          "rarity": 3,
+          "buyPrice": 16850,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 22,
+          "itemId": "ashbound_shoes_t1",
+          "minLevel": 0,
+          "maxLevel": 4,
+          "rarity": 3,
+          "buyPrice": 650,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 23,
+          "itemId": "gloomhide_shoes_t5",
+          "minLevel": 5,
+          "maxLevel": 9,
+          "rarity": 3,
+          "buyPrice": 1150,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 24,
+          "itemId": "shadowiron_shoes_t10",
+          "minLevel": 10,
+          "maxLevel": 14,
+          "rarity": 3,
+          "buyPrice": 2000,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 25,
+          "itemId": "nightglass_shoes_t15",
+          "minLevel": 15,
+          "maxLevel": 19,
+          "rarity": 3,
+          "buyPrice": 3400,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 26,
+          "itemId": "eclipseguard_shoes_t20",
+          "minLevel": 20,
+          "maxLevel": 24,
+          "rarity": 3,
+          "buyPrice": 5850,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 27,
+          "itemId": "voidforged_shoes_t25",
+          "minLevel": 25,
+          "maxLevel": 29,
+          "rarity": 3,
+          "buyPrice": 9950,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 28,
+          "itemId": "aeonblight_shoes_t30",
+          "minLevel": 30,
+          "maxLevel": 60,
+          "rarity": 3,
+          "buyPrice": 16850,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 29,
+          "itemId": "ashbound_cloak_t1",
+          "minLevel": 0,
+          "maxLevel": 4,
+          "rarity": 3,
+          "buyPrice": 650,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 30,
+          "itemId": "gloomhide_cloak_t5",
+          "minLevel": 5,
+          "maxLevel": 9,
+          "rarity": 3,
+          "buyPrice": 1150,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 31,
+          "itemId": "shadowiron_cloak_t10",
+          "minLevel": 10,
+          "maxLevel": 14,
+          "rarity": 3,
+          "buyPrice": 2000,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 32,
+          "itemId": "nightglass_cloak_t15",
+          "minLevel": 15,
+          "maxLevel": 19,
+          "rarity": 3,
+          "buyPrice": 3400,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 33,
+          "itemId": "eclipseguard_cloak_t20",
+          "minLevel": 20,
+          "maxLevel": 24,
+          "rarity": 3,
+          "buyPrice": 5850,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 34,
+          "itemId": "voidforged_cloak_t25",
+          "minLevel": 25,
+          "maxLevel": 29,
+          "rarity": 3,
+          "buyPrice": 9950,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 35,
+          "itemId": "aeonblight_cloak_t30",
+          "minLevel": 30,
+          "maxLevel": 60,
+          "rarity": 3,
+          "buyPrice": 16850,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 36,
+          "itemId": "ashbound_accessory_t1",
+          "minLevel": 0,
+          "maxLevel": 4,
+          "rarity": 3,
+          "buyPrice": 650,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 37,
+          "itemId": "gloomhide_accessory_t5",
+          "minLevel": 5,
+          "maxLevel": 9,
+          "rarity": 3,
+          "buyPrice": 1150,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 38,
+          "itemId": "shadowiron_accessory_t10",
+          "minLevel": 10,
+          "maxLevel": 14,
+          "rarity": 3,
+          "buyPrice": 2000,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 39,
+          "itemId": "nightglass_accessory_t15",
+          "minLevel": 15,
+          "maxLevel": 19,
+          "rarity": 3,
+          "buyPrice": 3400,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 40,
+          "itemId": "eclipseguard_accessory_t20",
+          "minLevel": 20,
+          "maxLevel": 24,
+          "rarity": 3,
+          "buyPrice": 5850,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 41,
+          "itemId": "voidforged_accessory_t25",
+          "minLevel": 25,
+          "maxLevel": 29,
+          "rarity": 3,
+          "buyPrice": 9950,
+          "dailyLimit": 1
+        },
+        {
+          "slotIndex": 42,
+          "itemId": "aeonblight_accessory_t30",
+          "minLevel": 30,
+          "maxLevel": 60,
+          "rarity": 3,
+          "buyPrice": 16850,
+          "dailyLimit": 1
+        }
+      ],
+      "dailyLimitTimezone": "Asia/Shanghai"
+    },
+    {
+      "shopId": "mystery_merchant",
+      "displayName": "神秘商人",
+      "sellAllItems": false,
+      "sellItems": [],
+      "mystery": {
+        "maxSlots": 4,
+        "discounts": [
+          {
+            "bps": 10000,
+            "weight": 70
+          },
+          {
+            "bps": 9000,
+            "weight": 20
+          },
+          {
+            "bps": 8000,
+            "weight": 8
+          },
+          {
+            "bps": 7000,
+            "weight": 2
+          }
+        ],
+        "slots": [
+          {
+            "slotIndex": 1,
+            "unlockLevel": 0,
+            "pools": [
+              {
+                "itemId": "ashwood_green",
+                "weight": 10,
+                "quantity": 5,
+                "baseGold": 225
+              },
+              {
+                "itemId": "gloomstone_green",
+                "weight": 10,
+                "quantity": 5,
+                "baseGold": 270
+              },
+              {
+                "itemId": "shadow_iron_green",
+                "weight": 10,
+                "quantity": 5,
+                "baseGold": 300
+              },
+              {
+                "itemId": "gloomcap_spore_green",
+                "weight": 10,
+                "quantity": 5,
+                "baseGold": 330
+              },
+              {
+                "itemId": "enhancement_stone_t1",
+                "weight": 8,
+                "quantity": 1,
+                "baseGold": 120
+              },
+              {
+                "itemId": "enhancement_stone_t5",
+                "weight": 5,
+                "quantity": 1,
+                "baseGold": 200
+              },
+              {
+                "itemId": "boss_ticket_ashen_threshold",
+                "weight": 2,
+                "quantity": 1,
+                "minDiscount": 8000,
+                "baseToken": 150
+              },
+              {
+                "itemId": "ashbound_sword_t1",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 0,
+                "maxLevel": 4,
+                "minDiscount": 9000,
+                "baseToken": 3500
+              },
+              {
+                "itemId": "ashbound_sword_t1",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 0,
+                "maxLevel": 4,
+                "minDiscount": 9000,
+                "baseToken": 5000
+              },
+              {
+                "itemId": "gloomhide_sword_t5",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 5,
+                "maxLevel": 9,
+                "minDiscount": 9000,
+                "baseToken": 5000
+              },
+              {
+                "itemId": "gloomhide_sword_t5",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 5,
+                "maxLevel": 9,
+                "minDiscount": 9000,
+                "baseToken": 7000
+              },
+              {
+                "itemId": "ashbound_axe_t1",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 0,
+                "maxLevel": 4,
+                "minDiscount": 9000,
+                "baseToken": 3500
+              },
+              {
+                "itemId": "ashbound_axe_t1",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 0,
+                "maxLevel": 4,
+                "minDiscount": 9000,
+                "baseToken": 5000
+              },
+              {
+                "itemId": "gloomhide_axe_t5",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 5,
+                "maxLevel": 9,
+                "minDiscount": 9000,
+                "baseToken": 5000
+              },
+              {
+                "itemId": "gloomhide_axe_t5",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 5,
+                "maxLevel": 9,
+                "minDiscount": 9000,
+                "baseToken": 7000
+              },
+              {
+                "itemId": "ashbound_bow_t1",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 0,
+                "maxLevel": 4,
+                "minDiscount": 9000,
+                "baseToken": 3500
+              },
+              {
+                "itemId": "ashbound_bow_t1",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 0,
+                "maxLevel": 4,
+                "minDiscount": 9000,
+                "baseToken": 5000
+              },
+              {
+                "itemId": "gloomhide_bow_t5",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 5,
+                "maxLevel": 9,
+                "minDiscount": 9000,
+                "baseToken": 5000
+              },
+              {
+                "itemId": "gloomhide_bow_t5",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 5,
+                "maxLevel": 9,
+                "minDiscount": 9000,
+                "baseToken": 7000
+              },
+              {
+                "itemId": "ashbound_staff_t1",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 0,
+                "maxLevel": 4,
+                "minDiscount": 9000,
+                "baseToken": 3500
+              },
+              {
+                "itemId": "ashbound_staff_t1",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 0,
+                "maxLevel": 4,
+                "minDiscount": 9000,
+                "baseToken": 5000
+              },
+              {
+                "itemId": "gloomhide_staff_t5",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 5,
+                "maxLevel": 9,
+                "minDiscount": 9000,
+                "baseToken": 5000
+              },
+              {
+                "itemId": "gloomhide_staff_t5",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 5,
+                "maxLevel": 9,
+                "minDiscount": 9000,
+                "baseToken": 7000
+              },
+              {
+                "itemId": "ashbound_helmet_t1",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 0,
+                "maxLevel": 4,
+                "minDiscount": 9000,
+                "baseToken": 3500
+              },
+              {
+                "itemId": "ashbound_helmet_t1",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 0,
+                "maxLevel": 4,
+                "minDiscount": 9000,
+                "baseToken": 5000
+              },
+              {
+                "itemId": "gloomhide_helmet_t5",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 5,
+                "maxLevel": 9,
+                "minDiscount": 9000,
+                "baseToken": 5000
+              },
+              {
+                "itemId": "gloomhide_helmet_t5",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 5,
+                "maxLevel": 9,
+                "minDiscount": 9000,
+                "baseToken": 7000
+              },
+              {
+                "itemId": "ashbound_chest_t1",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 0,
+                "maxLevel": 4,
+                "minDiscount": 9000,
+                "baseToken": 3500
+              },
+              {
+                "itemId": "ashbound_chest_t1",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 0,
+                "maxLevel": 4,
+                "minDiscount": 9000,
+                "baseToken": 5000
+              },
+              {
+                "itemId": "gloomhide_chest_t5",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 5,
+                "maxLevel": 9,
+                "minDiscount": 9000,
+                "baseToken": 5000
+              },
+              {
+                "itemId": "gloomhide_chest_t5",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 5,
+                "maxLevel": 9,
+                "minDiscount": 9000,
+                "baseToken": 7000
+              },
+              {
+                "itemId": "ashbound_gloves_t1",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 0,
+                "maxLevel": 4,
+                "minDiscount": 9000,
+                "baseToken": 3500
+              },
+              {
+                "itemId": "ashbound_gloves_t1",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 0,
+                "maxLevel": 4,
+                "minDiscount": 9000,
+                "baseToken": 5000
+              },
+              {
+                "itemId": "gloomhide_gloves_t5",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 5,
+                "maxLevel": 9,
+                "minDiscount": 9000,
+                "baseToken": 5000
+              },
+              {
+                "itemId": "gloomhide_gloves_t5",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 5,
+                "maxLevel": 9,
+                "minDiscount": 9000,
+                "baseToken": 7000
+              },
+              {
+                "itemId": "ashbound_shoes_t1",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 0,
+                "maxLevel": 4,
+                "minDiscount": 9000,
+                "baseToken": 3500
+              },
+              {
+                "itemId": "ashbound_shoes_t1",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 0,
+                "maxLevel": 4,
+                "minDiscount": 9000,
+                "baseToken": 5000
+              },
+              {
+                "itemId": "gloomhide_shoes_t5",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 5,
+                "maxLevel": 9,
+                "minDiscount": 9000,
+                "baseToken": 5000
+              },
+              {
+                "itemId": "gloomhide_shoes_t5",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 5,
+                "maxLevel": 9,
+                "minDiscount": 9000,
+                "baseToken": 7000
+              },
+              {
+                "itemId": "ashbound_cloak_t1",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 0,
+                "maxLevel": 4,
+                "minDiscount": 9000,
+                "baseToken": 3500
+              },
+              {
+                "itemId": "ashbound_cloak_t1",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 0,
+                "maxLevel": 4,
+                "minDiscount": 9000,
+                "baseToken": 5000
+              },
+              {
+                "itemId": "gloomhide_cloak_t5",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 5,
+                "maxLevel": 9,
+                "minDiscount": 9000,
+                "baseToken": 5000
+              },
+              {
+                "itemId": "gloomhide_cloak_t5",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 5,
+                "maxLevel": 9,
+                "minDiscount": 9000,
+                "baseToken": 7000
+              },
+              {
+                "itemId": "ashbound_accessory_t1",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 0,
+                "maxLevel": 4,
+                "minDiscount": 9000,
+                "baseToken": 3500
+              },
+              {
+                "itemId": "ashbound_accessory_t1",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 0,
+                "maxLevel": 4,
+                "minDiscount": 9000,
+                "baseToken": 5000
+              },
+              {
+                "itemId": "gloomhide_accessory_t5",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 5,
+                "maxLevel": 9,
+                "minDiscount": 9000,
+                "baseToken": 5000
+              },
+              {
+                "itemId": "gloomhide_accessory_t5",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 5,
+                "maxLevel": 9,
+                "minDiscount": 9000,
+                "baseToken": 7000
+              }
+            ]
+          },
+          {
+            "slotIndex": 2,
+            "unlockLevel": 10,
+            "pools": [
+              {
+                "itemId": "ashwood_blue",
+                "weight": 8,
+                "quantity": 2,
+                "baseToken": 80
+              },
+              {
+                "itemId": "gloomstone_blue",
+                "weight": 8,
+                "quantity": 2,
+                "baseToken": 85
+              },
+              {
+                "itemId": "shadow_iron_blue",
+                "weight": 8,
+                "quantity": 2,
+                "baseToken": 90
+              },
+              {
+                "itemId": "gloomcap_spore_blue",
+                "weight": 8,
+                "quantity": 2,
+                "baseToken": 95
+              },
+              {
+                "itemId": "enhancement_stone_t10",
+                "weight": 7,
+                "quantity": 1,
+                "baseToken": 34
+              },
+              {
+                "itemId": "enhancement_stone_t15",
+                "weight": 5,
+                "quantity": 1,
+                "baseToken": 58
+              },
+              {
+                "itemId": "boss_ticket_ashen_threshold",
+                "weight": 3,
+                "quantity": 1,
+                "minDiscount": 8000,
+                "baseToken": 150
+              },
+              {
+                "itemId": "shadowiron_sword_t10",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 10,
+                "maxLevel": 14,
+                "minDiscount": 9000,
+                "baseToken": 12000
+              },
+              {
+                "itemId": "shadowiron_sword_t10",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 10,
+                "maxLevel": 14,
+                "minDiscount": 9000,
+                "baseToken": 22000
+              },
+              {
+                "itemId": "nightglass_sword_t15",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 15,
+                "maxLevel": 19,
+                "minDiscount": 9000,
+                "baseToken": 18000
+              },
+              {
+                "itemId": "nightglass_sword_t15",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 15,
+                "maxLevel": 19,
+                "minDiscount": 9000,
+                "baseToken": 30000
+              },
+              {
+                "itemId": "shadowiron_axe_t10",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 10,
+                "maxLevel": 14,
+                "minDiscount": 9000,
+                "baseToken": 12000
+              },
+              {
+                "itemId": "shadowiron_axe_t10",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 10,
+                "maxLevel": 14,
+                "minDiscount": 9000,
+                "baseToken": 22000
+              },
+              {
+                "itemId": "nightglass_axe_t15",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 15,
+                "maxLevel": 19,
+                "minDiscount": 9000,
+                "baseToken": 18000
+              },
+              {
+                "itemId": "nightglass_axe_t15",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 15,
+                "maxLevel": 19,
+                "minDiscount": 9000,
+                "baseToken": 30000
+              },
+              {
+                "itemId": "shadowiron_bow_t10",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 10,
+                "maxLevel": 14,
+                "minDiscount": 9000,
+                "baseToken": 12000
+              },
+              {
+                "itemId": "shadowiron_bow_t10",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 10,
+                "maxLevel": 14,
+                "minDiscount": 9000,
+                "baseToken": 22000
+              },
+              {
+                "itemId": "nightglass_bow_t15",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 15,
+                "maxLevel": 19,
+                "minDiscount": 9000,
+                "baseToken": 18000
+              },
+              {
+                "itemId": "nightglass_bow_t15",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 15,
+                "maxLevel": 19,
+                "minDiscount": 9000,
+                "baseToken": 30000
+              },
+              {
+                "itemId": "shadowiron_staff_t10",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 10,
+                "maxLevel": 14,
+                "minDiscount": 9000,
+                "baseToken": 12000
+              },
+              {
+                "itemId": "shadowiron_staff_t10",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 10,
+                "maxLevel": 14,
+                "minDiscount": 9000,
+                "baseToken": 22000
+              },
+              {
+                "itemId": "nightglass_staff_t15",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 15,
+                "maxLevel": 19,
+                "minDiscount": 9000,
+                "baseToken": 18000
+              },
+              {
+                "itemId": "nightglass_staff_t15",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 15,
+                "maxLevel": 19,
+                "minDiscount": 9000,
+                "baseToken": 30000
+              },
+              {
+                "itemId": "shadowiron_helmet_t10",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 10,
+                "maxLevel": 14,
+                "minDiscount": 9000,
+                "baseToken": 12000
+              },
+              {
+                "itemId": "shadowiron_helmet_t10",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 10,
+                "maxLevel": 14,
+                "minDiscount": 9000,
+                "baseToken": 22000
+              },
+              {
+                "itemId": "nightglass_helmet_t15",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 15,
+                "maxLevel": 19,
+                "minDiscount": 9000,
+                "baseToken": 18000
+              },
+              {
+                "itemId": "nightglass_helmet_t15",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 15,
+                "maxLevel": 19,
+                "minDiscount": 9000,
+                "baseToken": 30000
+              },
+              {
+                "itemId": "shadowiron_chest_t10",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 10,
+                "maxLevel": 14,
+                "minDiscount": 9000,
+                "baseToken": 12000
+              },
+              {
+                "itemId": "shadowiron_chest_t10",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 10,
+                "maxLevel": 14,
+                "minDiscount": 9000,
+                "baseToken": 22000
+              },
+              {
+                "itemId": "nightglass_chest_t15",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 15,
+                "maxLevel": 19,
+                "minDiscount": 9000,
+                "baseToken": 18000
+              },
+              {
+                "itemId": "nightglass_chest_t15",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 15,
+                "maxLevel": 19,
+                "minDiscount": 9000,
+                "baseToken": 30000
+              },
+              {
+                "itemId": "shadowiron_gloves_t10",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 10,
+                "maxLevel": 14,
+                "minDiscount": 9000,
+                "baseToken": 12000
+              },
+              {
+                "itemId": "shadowiron_gloves_t10",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 10,
+                "maxLevel": 14,
+                "minDiscount": 9000,
+                "baseToken": 22000
+              },
+              {
+                "itemId": "nightglass_gloves_t15",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 15,
+                "maxLevel": 19,
+                "minDiscount": 9000,
+                "baseToken": 18000
+              },
+              {
+                "itemId": "nightglass_gloves_t15",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 15,
+                "maxLevel": 19,
+                "minDiscount": 9000,
+                "baseToken": 30000
+              },
+              {
+                "itemId": "shadowiron_shoes_t10",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 10,
+                "maxLevel": 14,
+                "minDiscount": 9000,
+                "baseToken": 12000
+              },
+              {
+                "itemId": "shadowiron_shoes_t10",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 10,
+                "maxLevel": 14,
+                "minDiscount": 9000,
+                "baseToken": 22000
+              },
+              {
+                "itemId": "nightglass_shoes_t15",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 15,
+                "maxLevel": 19,
+                "minDiscount": 9000,
+                "baseToken": 18000
+              },
+              {
+                "itemId": "nightglass_shoes_t15",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 15,
+                "maxLevel": 19,
+                "minDiscount": 9000,
+                "baseToken": 30000
+              },
+              {
+                "itemId": "shadowiron_cloak_t10",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 10,
+                "maxLevel": 14,
+                "minDiscount": 9000,
+                "baseToken": 12000
+              },
+              {
+                "itemId": "shadowiron_cloak_t10",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 10,
+                "maxLevel": 14,
+                "minDiscount": 9000,
+                "baseToken": 22000
+              },
+              {
+                "itemId": "nightglass_cloak_t15",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 15,
+                "maxLevel": 19,
+                "minDiscount": 9000,
+                "baseToken": 18000
+              },
+              {
+                "itemId": "nightglass_cloak_t15",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 15,
+                "maxLevel": 19,
+                "minDiscount": 9000,
+                "baseToken": 30000
+              },
+              {
+                "itemId": "shadowiron_accessory_t10",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 10,
+                "maxLevel": 14,
+                "minDiscount": 9000,
+                "baseToken": 12000
+              },
+              {
+                "itemId": "shadowiron_accessory_t10",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 10,
+                "maxLevel": 14,
+                "minDiscount": 9000,
+                "baseToken": 22000
+              },
+              {
+                "itemId": "nightglass_accessory_t15",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 15,
+                "maxLevel": 19,
+                "minDiscount": 9000,
+                "baseToken": 18000
+              },
+              {
+                "itemId": "nightglass_accessory_t15",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 15,
+                "maxLevel": 19,
+                "minDiscount": 9000,
+                "baseToken": 30000
+              }
+            ]
+          },
+          {
+            "slotIndex": 3,
+            "unlockLevel": 20,
+            "pools": [
+              {
+                "itemId": "ashwood_purple",
+                "weight": 5,
+                "quantity": 1,
+                "minDiscount": 8500,
+                "baseToken": 140
+              },
+              {
+                "itemId": "gloomstone_purple",
+                "weight": 5,
+                "quantity": 1,
+                "minDiscount": 8500,
+                "baseToken": 145
+              },
+              {
+                "itemId": "shadow_iron_purple",
+                "weight": 5,
+                "quantity": 1,
+                "minDiscount": 8500,
+                "baseToken": 155
+              },
+              {
+                "itemId": "gloomcap_spore_purple",
+                "weight": 5,
+                "quantity": 1,
+                "minDiscount": 8500,
+                "baseToken": 160
+              },
+              {
+                "itemId": "enhancement_stone_t20",
+                "weight": 8,
+                "quantity": 1,
+                "minDiscount": 8500,
+                "baseToken": 98
+              },
+              {
+                "itemId": "enhancement_stone_t25",
+                "weight": 5,
+                "quantity": 1,
+                "minDiscount": 8500,
+                "baseToken": 166
+              },
+              {
+                "itemId": "boss_ticket_gloomwood",
+                "weight": 4,
+                "quantity": 1,
+                "minDiscount": 8500,
+                "baseToken": 420
+              },
+              {
+                "itemId": "eclipseguard_sword_t20",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 20,
+                "maxLevel": 24,
+                "minDiscount": 9000,
+                "baseToken": 26000
+              },
+              {
+                "itemId": "eclipseguard_sword_t20",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 20,
+                "maxLevel": 24,
+                "minDiscount": 9000,
+                "baseToken": 42000
+              },
+              {
+                "itemId": "voidforged_sword_t25",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 25,
+                "maxLevel": 29,
+                "minDiscount": 9000,
+                "baseToken": 35000
+              },
+              {
+                "itemId": "voidforged_sword_t25",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 25,
+                "maxLevel": 29,
+                "minDiscount": 9000,
+                "baseToken": 38000
+              },
+              {
+                "itemId": "eclipseguard_axe_t20",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 20,
+                "maxLevel": 24,
+                "minDiscount": 9000,
+                "baseToken": 26000
+              },
+              {
+                "itemId": "eclipseguard_axe_t20",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 20,
+                "maxLevel": 24,
+                "minDiscount": 9000,
+                "baseToken": 42000
+              },
+              {
+                "itemId": "voidforged_axe_t25",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 25,
+                "maxLevel": 29,
+                "minDiscount": 9000,
+                "baseToken": 35000
+              },
+              {
+                "itemId": "voidforged_axe_t25",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 25,
+                "maxLevel": 29,
+                "minDiscount": 9000,
+                "baseToken": 38000
+              },
+              {
+                "itemId": "eclipseguard_bow_t20",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 20,
+                "maxLevel": 24,
+                "minDiscount": 9000,
+                "baseToken": 26000
+              },
+              {
+                "itemId": "eclipseguard_bow_t20",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 20,
+                "maxLevel": 24,
+                "minDiscount": 9000,
+                "baseToken": 42000
+              },
+              {
+                "itemId": "voidforged_bow_t25",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 25,
+                "maxLevel": 29,
+                "minDiscount": 9000,
+                "baseToken": 35000
+              },
+              {
+                "itemId": "voidforged_bow_t25",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 25,
+                "maxLevel": 29,
+                "minDiscount": 9000,
+                "baseToken": 38000
+              },
+              {
+                "itemId": "eclipseguard_staff_t20",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 20,
+                "maxLevel": 24,
+                "minDiscount": 9000,
+                "baseToken": 26000
+              },
+              {
+                "itemId": "eclipseguard_staff_t20",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 20,
+                "maxLevel": 24,
+                "minDiscount": 9000,
+                "baseToken": 42000
+              },
+              {
+                "itemId": "voidforged_staff_t25",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 25,
+                "maxLevel": 29,
+                "minDiscount": 9000,
+                "baseToken": 35000
+              },
+              {
+                "itemId": "voidforged_staff_t25",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 25,
+                "maxLevel": 29,
+                "minDiscount": 9000,
+                "baseToken": 38000
+              },
+              {
+                "itemId": "eclipseguard_helmet_t20",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 20,
+                "maxLevel": 24,
+                "minDiscount": 9000,
+                "baseToken": 26000
+              },
+              {
+                "itemId": "eclipseguard_helmet_t20",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 20,
+                "maxLevel": 24,
+                "minDiscount": 9000,
+                "baseToken": 42000
+              },
+              {
+                "itemId": "voidforged_helmet_t25",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 25,
+                "maxLevel": 29,
+                "minDiscount": 9000,
+                "baseToken": 35000
+              },
+              {
+                "itemId": "voidforged_helmet_t25",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 25,
+                "maxLevel": 29,
+                "minDiscount": 9000,
+                "baseToken": 38000
+              },
+              {
+                "itemId": "eclipseguard_chest_t20",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 20,
+                "maxLevel": 24,
+                "minDiscount": 9000,
+                "baseToken": 26000
+              },
+              {
+                "itemId": "eclipseguard_chest_t20",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 20,
+                "maxLevel": 24,
+                "minDiscount": 9000,
+                "baseToken": 42000
+              },
+              {
+                "itemId": "voidforged_chest_t25",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 25,
+                "maxLevel": 29,
+                "minDiscount": 9000,
+                "baseToken": 35000
+              },
+              {
+                "itemId": "voidforged_chest_t25",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 25,
+                "maxLevel": 29,
+                "minDiscount": 9000,
+                "baseToken": 38000
+              },
+              {
+                "itemId": "eclipseguard_gloves_t20",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 20,
+                "maxLevel": 24,
+                "minDiscount": 9000,
+                "baseToken": 26000
+              },
+              {
+                "itemId": "eclipseguard_gloves_t20",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 20,
+                "maxLevel": 24,
+                "minDiscount": 9000,
+                "baseToken": 42000
+              },
+              {
+                "itemId": "voidforged_gloves_t25",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 25,
+                "maxLevel": 29,
+                "minDiscount": 9000,
+                "baseToken": 35000
+              },
+              {
+                "itemId": "voidforged_gloves_t25",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 25,
+                "maxLevel": 29,
+                "minDiscount": 9000,
+                "baseToken": 38000
+              },
+              {
+                "itemId": "eclipseguard_shoes_t20",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 20,
+                "maxLevel": 24,
+                "minDiscount": 9000,
+                "baseToken": 26000
+              },
+              {
+                "itemId": "eclipseguard_shoes_t20",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 20,
+                "maxLevel": 24,
+                "minDiscount": 9000,
+                "baseToken": 42000
+              },
+              {
+                "itemId": "voidforged_shoes_t25",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 25,
+                "maxLevel": 29,
+                "minDiscount": 9000,
+                "baseToken": 35000
+              },
+              {
+                "itemId": "voidforged_shoes_t25",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 25,
+                "maxLevel": 29,
+                "minDiscount": 9000,
+                "baseToken": 38000
+              },
+              {
+                "itemId": "eclipseguard_cloak_t20",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 20,
+                "maxLevel": 24,
+                "minDiscount": 9000,
+                "baseToken": 26000
+              },
+              {
+                "itemId": "eclipseguard_cloak_t20",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 20,
+                "maxLevel": 24,
+                "minDiscount": 9000,
+                "baseToken": 42000
+              },
+              {
+                "itemId": "voidforged_cloak_t25",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 25,
+                "maxLevel": 29,
+                "minDiscount": 9000,
+                "baseToken": 35000
+              },
+              {
+                "itemId": "voidforged_cloak_t25",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 25,
+                "maxLevel": 29,
+                "minDiscount": 9000,
+                "baseToken": 38000
+              },
+              {
+                "itemId": "eclipseguard_accessory_t20",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 20,
+                "maxLevel": 24,
+                "minDiscount": 9000,
+                "baseToken": 26000
+              },
+              {
+                "itemId": "eclipseguard_accessory_t20",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 20,
+                "maxLevel": 24,
+                "minDiscount": 9000,
+                "baseToken": 42000
+              },
+              {
+                "itemId": "voidforged_accessory_t25",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 25,
+                "maxLevel": 29,
+                "minDiscount": 9000,
+                "baseToken": 35000
+              },
+              {
+                "itemId": "voidforged_accessory_t25",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 25,
+                "maxLevel": 29,
+                "minDiscount": 9000,
+                "baseToken": 38000
+              }
+            ]
+          },
+          {
+            "slotIndex": 4,
+            "unlockLevel": 30,
+            "pools": [
+              {
+                "itemId": "enhancement_stone_t30",
+                "weight": 10,
+                "quantity": 1,
+                "minDiscount": 9000,
+                "baseToken": 280
+              },
+              {
+                "itemId": "boss_ticket_voidscar",
+                "weight": 4,
+                "quantity": 1,
+                "minDiscount": 9000,
+                "baseToken": 900
+              },
+              {
+                "itemId": "aeon_shard",
+                "weight": 3,
+                "quantity": 1,
+                "minDiscount": 9000,
+                "baseToken": 1200
+              },
+              {
+                "itemId": "aeb_exchange_voucher",
+                "weight": 1,
+                "quantity": 1,
+                "baseToken": 30,
+                "minDiscount": 9000
+              },
+              {
+                "itemId": "aeonblight_sword_t30",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 30,
+                "maxLevel": 60,
+                "minDiscount": 9000,
+                "baseToken": 65000
+              },
+              {
+                "itemId": "aeonblight_sword_t30",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 30,
+                "maxLevel": 60,
+                "minDiscount": 9000,
+                "baseToken": 94000
+              },
+              {
+                "itemId": "aeonblight_axe_t30",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 30,
+                "maxLevel": 60,
+                "minDiscount": 9000,
+                "baseToken": 65000
+              },
+              {
+                "itemId": "aeonblight_axe_t30",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 30,
+                "maxLevel": 60,
+                "minDiscount": 9000,
+                "baseToken": 94000
+              },
+              {
+                "itemId": "aeonblight_bow_t30",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 30,
+                "maxLevel": 60,
+                "minDiscount": 9000,
+                "baseToken": 65000
+              },
+              {
+                "itemId": "aeonblight_bow_t30",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 30,
+                "maxLevel": 60,
+                "minDiscount": 9000,
+                "baseToken": 94000
+              },
+              {
+                "itemId": "aeonblight_staff_t30",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 30,
+                "maxLevel": 60,
+                "minDiscount": 9000,
+                "baseToken": 65000
+              },
+              {
+                "itemId": "aeonblight_staff_t30",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 30,
+                "maxLevel": 60,
+                "minDiscount": 9000,
+                "baseToken": 94000
+              },
+              {
+                "itemId": "aeonblight_helmet_t30",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 30,
+                "maxLevel": 60,
+                "minDiscount": 9000,
+                "baseToken": 65000
+              },
+              {
+                "itemId": "aeonblight_helmet_t30",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 30,
+                "maxLevel": 60,
+                "minDiscount": 9000,
+                "baseToken": 94000
+              },
+              {
+                "itemId": "aeonblight_chest_t30",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 30,
+                "maxLevel": 60,
+                "minDiscount": 9000,
+                "baseToken": 65000
+              },
+              {
+                "itemId": "aeonblight_chest_t30",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 30,
+                "maxLevel": 60,
+                "minDiscount": 9000,
+                "baseToken": 94000
+              },
+              {
+                "itemId": "aeonblight_gloves_t30",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 30,
+                "maxLevel": 60,
+                "minDiscount": 9000,
+                "baseToken": 65000
+              },
+              {
+                "itemId": "aeonblight_gloves_t30",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 30,
+                "maxLevel": 60,
+                "minDiscount": 9000,
+                "baseToken": 94000
+              },
+              {
+                "itemId": "aeonblight_shoes_t30",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 30,
+                "maxLevel": 60,
+                "minDiscount": 9000,
+                "baseToken": 65000
+              },
+              {
+                "itemId": "aeonblight_shoes_t30",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 30,
+                "maxLevel": 60,
+                "minDiscount": 9000,
+                "baseToken": 94000
+              },
+              {
+                "itemId": "aeonblight_cloak_t30",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 30,
+                "maxLevel": 60,
+                "minDiscount": 9000,
+                "baseToken": 65000
+              },
+              {
+                "itemId": "aeonblight_cloak_t30",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 30,
+                "maxLevel": 60,
+                "minDiscount": 9000,
+                "baseToken": 94000
+              },
+              {
+                "itemId": "aeonblight_accessory_t30",
+                "weight": 4,
+                "quantity": 1,
+                "rarity": 4,
+                "minLevel": 30,
+                "maxLevel": 60,
+                "minDiscount": 9000,
+                "baseToken": 65000
+              },
+              {
+                "itemId": "aeonblight_accessory_t30",
+                "weight": 1,
+                "quantity": 1,
+                "rarity": 5,
+                "minLevel": 30,
+                "maxLevel": 60,
+                "minDiscount": 9000,
+                "baseToken": 94000
+              }
+            ]
+          }
+        ],
+        "manualRefreshTokenBaseCost": 10,
+        "manualRefreshTokenStepCost": 5,
+        "manualRefreshTokenMaxCost": 50,
+        "dailyLimitTimezone": "Asia/Shanghai"
+      }
+    }
+  ]
 }
