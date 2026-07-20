@@ -529,9 +529,6 @@ func launchGameURL(base string, result LaunchResult) string {
 	if strings.TrimSpace(result.WalletPlugin) != "" {
 		query.Set("walletPlugin", result.WalletPlugin)
 	}
-	if strings.TrimSpace(result.PublicEndpoint) != "" {
-		query.Set("publicEndpoint", result.PublicEndpoint)
-	}
 	parsed.RawQuery = query.Encode()
 	return parsed.String()
 }

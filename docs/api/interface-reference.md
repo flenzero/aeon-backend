@@ -280,8 +280,8 @@ Body：`{"characterId":10,"posX":10.5,"posY":20.25,"currentMap":"town","playTime
 - 认证：JWT；校验账号和持久化 Session。
 - `serverId` 可省略；省略时自动选择公开状态为 `online` 且在线人数最少的服务器。
 - 主页不传 `characterId`；传入未知字段会被拒绝。角色选择、创建和副本恢复在客户端进入后完成。
-- 成功：`status=ready`、`ticket`、`expiresIn`、`expiresAt`、`serverId`、`host`、`port`、`publicEndpoint?`、`walletAddress`、`walletPlugin?`、`gameUrl?`；Ticket 有效期 90 秒。
-- `gameUrl` 仅在配置 `GAME_CLIENT_BASE_URL` 时返回，格式为基础 URL 加 `ticket/serverId/host/port/walletAddress/walletPlugin/publicEndpoint?` 查询参数。
+- 成功：`status=ready`、`ticket`、`expiresIn`、`expiresAt`、`serverId`、`host`、`port`、`walletAddress`、`walletPlugin?`、`gameUrl?`；Ticket 有效期 90 秒。
+- `gameUrl` 仅在配置 `GAME_CLIENT_BASE_URL` 时返回；后端保留该自定义入口 URL 的 scheme/host/path/原 query，并追加 `ticket/serverId/host/port/walletAddress/walletPlugin?` 查询参数；不暴露 `publicEndpoint`。
 - 错误 code `4013`。
 
 #### GET `/api/game/dungeon/recovery`
@@ -978,7 +978,7 @@ Body：`{"orderId":"uuid","reason":"chain confirmation"}`。
 | POST `/api/character/delete` | Service Identity：`account.gameplay`；Header：`X-Account-Id: 1`；Body：`{"characterId":10}` | `{"ok":true,"data":{}}` |
 | GET `/api/player/profile` | Service Identity：`account.gameplay`；Header：`X-Account-Id: 1`；Query：`characterId=10` | `{"ok":true,"data":{"player":{"characterId":10,"currentMap":"town","posX":10.5,"posY":20.25},"economy":{...},"appearanceJson":{},"characterName":"Knight"}}` |
 | POST `/api/player/save` | Service Identity：`account.gameplay`；Header：`X-Account-Id: 1`；Body：`{"characterId":10,"posX":10.5,"posY":20.25,"currentMap":"town","playTimeSec":360,"hunger":92.5}` | `{"ok":true,"data":{}}` |
-| POST `/api/game/launch` | Header：`Authorization: Bearer <accessToken>`；Body：`{"sessionId":"session_x","serverId":"world-a"}` | `{"ok":true,"data":{"status":"ready","ticket":"ticket_x","expiresIn":90,"expiresAt":"2026-07-14T10:01:30Z","serverId":"world-a","host":"10.0.0.10","port":7001,"publicEndpoint":"wss://world-a.example.com","walletAddress":"<solana-wallet>","walletPlugin":"phantom","gameUrl":"https://client.example/play?ticket=ticket_x&serverId=world-a&host=10.0.0.10&port=7001&walletAddress=<solana-wallet>&walletPlugin=phantom"}}` |
+| POST `/api/game/launch` | Header：`Authorization: Bearer <accessToken>`；Body：`{"sessionId":"session_x","serverId":"world-a"}` | `{"ok":true,"data":{"status":"ready","ticket":"ticket_x","expiresIn":90,"expiresAt":"2026-07-14T10:01:30Z","serverId":"world-a","host":"10.0.0.10","port":7001,"walletAddress":"<solana-wallet>","walletPlugin":"phantom","gameUrl":"https://launch-entry.example.com/custom-api?ticket=ticket_x&serverId=world-a&host=10.0.0.10&port=7001&walletAddress=<solana-wallet>&walletPlugin=phantom"}}` |
 | GET `/api/game/dungeon/recovery` | Header：`Authorization: Bearer <accessToken>`；Query：`characterId=10` | 无恢复：`{"ok":true,"data":{"required":false}}`；有恢复：`{"ok":true,"data":{"required":true,"status":"STARTED","dungeonRunId":"run_uuid","accountId":1,"characterId":10,"serverId":"world-a","chapterId":1,"floorId":3,"startedAt":"2026-07-14T09:55:00Z"}}` |
 | POST `/api/game/dungeon/recovery` | Header：`Authorization: Bearer <accessToken>`；Body：`{"characterId":10,"dungeonRunId":"run_uuid","action":"resume","sessionId":"session_x"}` | Resume：`{"ok":true,"data":{"action":"resume","status":"RESUME_READY","dungeonRunId":"run_uuid","serverId":"world-a","ticket":"ticket_y","expiresAt":"2026-07-14T10:01:30Z"}}`；Abandon：`{"ok":true,"data":{"action":"abandon","status":"CANCELLED","dungeonRunId":"run_uuid"}}` |
 | POST `/api/game/launch/consume` | Service Identity：`account.gameplay`，subject=`world-a`；Body：`{"ticket":"ticket_x","serverId":"world-a"}` | `{"ok":true,"data":{"accountId":1,"walletAddress":"<solana-wallet>","walletPlugin":"phantom","sessionId":"session_x","serverId":"world-a"}}` |

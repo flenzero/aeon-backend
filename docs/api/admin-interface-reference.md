@@ -126,6 +126,14 @@ Authorization: Bearer <ADMIN_TOKEN>
 
 ## 4. 账号管理
 
+### GET `/api/admin/accounts/selector`
+
+- 权限：普通管理员。
+- Query：`keyword?`、`status?=ACTIVE|BANNED|FROZEN|DELETED`、`limit?`、`offset?`。
+- 用于后台账号选择器；`keyword` 会匹配账号 ID、用户名、钱包地址和账号下角色名。
+- 成功：`items: AdminAccountSelectorItem[]`、`count`、`limit`、`offset`。
+- 每个 item 返回：`accountId`、`username`、`walletAddress`、`status`、`roles`、`createdAt`、`lastLoginAt`；其中 `roles` 是该账号未删除角色名按 slot/id 排序后的英文逗号分隔字符串，例如 `"Knight,Mage"`。
+
 ### GET `/api/admin/accounts`
 
 - Query：`accountId` 或 `id`，也可使用 `wallet`；至少提供一种。
@@ -258,12 +266,12 @@ Query：
 | `category?` | 分类过滤 |
 | `isEquipment?` | `true` / `false` |
 | `rarity?` | 稀有度过滤 |
-| `limit?` / `offset?` | `limit` 默认 200，范围 1-500；`offset` 非负 |
-| `grouped?` | `true` 时按分类返回 `groups` |
+| `limit?` / `offset?` | 非 grouped 列表分页；`limit` 默认 200，范围 1-500；`offset` 非负 |
+| `grouped?` | `true` 时按分类返回完整 `groups`，不按 `limit`/`offset` 截断 |
 
 成功返回当前生效 Economy 配置生成的目录：`configVersion`、`items` 或 `groups`、`categories`、`count`、`total`、`limit`、`offset`。
 
-目录项包含 `itemId`、`displayName`、`category`、`categoryLabel`、`rarity`、`rarityLabel`、`isEquipment`、`equipmentSlot`、`equipmentSlotLabel`、`weaponType?`、`weaponTypeKey?`、`seriesId?`、`stage?`、`displayType?`、`stackable`、`maxGrantQuantity`、`enabledForAdminGrant`。装备类 `maxGrantQuantity=1`，用于和发奖/补偿接口的装备数量校验保持一致。
+目录项包含 `itemId`、`displayName`、`category`、`categoryLabel`、`rarity`、`rarityLabel`、`isEquipment`、`equipmentSlot`、`equipmentSlotLabel`、`weaponType?`、`weaponTypeKey?`、`seriesId?`、`stage?`、`displayType?`、`stackable`、`maxGrantQuantity`、`enabledForAdminGrant`。装备模板会按当前配置的装备品质展开为多条 `itemId + rarity` 可选项；装备类 `maxGrantQuantity=1`，用于和发奖/补偿接口的装备数量校验保持一致。
 
 ## 6. Marketplace 限制
 

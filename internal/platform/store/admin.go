@@ -26,6 +26,23 @@ type AdminAccountDetail struct {
 	ActiveRestrictions int        `json:"activeRestrictions"`
 }
 
+type AdminAccountSelectorFilter struct {
+	Keyword string
+	Status  string
+	Limit   int
+	Offset  int
+}
+
+type AdminAccountSelectorItem struct {
+	AccountID     int64     `json:"accountId"`
+	Username      string    `json:"username"`
+	WalletAddress string    `json:"walletAddress"`
+	Status        string    `json:"status"`
+	Roles         string    `json:"roles"`
+	CreatedAt     time.Time `json:"createdAt"`
+	LastLoginAt   time.Time `json:"lastLoginAt"`
+}
+
 type MarketRestriction struct {
 	ID              int64      `json:"id"`
 	AccountID       int64      `json:"accountId"`
@@ -267,6 +284,21 @@ func clampAdminLimit(limit int) int {
 		return 200
 	}
 	return limit
+}
+
+func normalizeAdminAccountSelectorFilter(filter AdminAccountSelectorFilter) (AdminAccountSelectorFilter, error) {
+	filter.Keyword = strings.TrimSpace(filter.Keyword)
+	filter.Status = strings.ToUpper(strings.TrimSpace(filter.Status))
+	switch filter.Status {
+	case "", "ACTIVE", "BANNED", "FROZEN", "DELETED":
+	default:
+		return filter, errors.New("status must be ACTIVE, BANNED, FROZEN, or DELETED")
+	}
+	filter.Limit = clampAdminLimit(filter.Limit)
+	if filter.Offset < 0 {
+		filter.Offset = 0
+	}
+	return filter, nil
 }
 
 func (s *PostgresStore) AdminOperation(opID string) (AdminOperation, error) {
@@ -514,6 +546,77 @@ func (s *PostgresStore) AdminGetAccount(accountID int64, wallet string) (AdminAc
 		row.BanReason = *banReason
 	}
 	return row, nil
+}
+
+func (s *PostgresStore) ListAdminAccountSelector(filter AdminAccountSelectorFilter) ([]AdminAccountSelectorItem, error) {
+	filter, err := normalizeAdminAccountSelectorFilter(filter)
+	if err != nil {
+		return nil, err
+	}
+	clauses := []string{"TRUE"}
+	args := []any{}
+	add := func(value any) string {
+		args = append(args, value)
+		return fmt.Sprintf("$%d", len(args))
+	}
+	if filter.Status != "" {
+		clauses = append(clauses, "a.status = "+add(filter.Status))
+	}
+	if filter.Keyword != "" {
+		placeholder := add("%" + filter.Keyword + "%")
+		clauses = append(clauses, fmt.Sprintf(`(
+			a.id::text ILIKE %[1]s
+			OR COALESCE(a.username, '') ILIKE %[1]s
+			OR COALESCE(a.solana_wallet_address, '') ILIKE %[1]s
+			OR EXISTS (
+				SELECT 1 FROM characters ck
+				WHERE ck.account_id = a.id
+					AND ck.is_deleted = FALSE
+					AND ck.name ILIKE %[1]s
+			)
+		)`, placeholder))
+	}
+	limitPlaceholder := add(filter.Limit)
+	offsetPlaceholder := add(filter.Offset)
+
+	rows, err := s.pool.Query(context.Background(), `
+		SELECT
+			a.id,
+			a.username,
+			COALESCE(a.solana_wallet_address, ''),
+			a.status,
+			COALESCE(string_agg(c.name, ',' ORDER BY c.slot_index, c.id) FILTER (WHERE c.id IS NOT NULL), ''),
+			a.created_at,
+			COALESCE(a.last_login_at, a.created_at)
+		FROM accounts a
+		LEFT JOIN characters c
+			ON c.account_id = a.id
+			AND c.is_deleted = FALSE
+		WHERE `+strings.Join(clauses, " AND ")+`
+		GROUP BY a.id, a.username, a.solana_wallet_address, a.status, a.created_at, a.last_login_at
+		ORDER BY COALESCE(a.last_login_at, a.created_at) DESC, a.id DESC
+		LIMIT `+limitPlaceholder+` OFFSET `+offsetPlaceholder, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []AdminAccountSelectorItem{}
+	for rows.Next() {
+		var item AdminAccountSelectorItem
+		if err := rows.Scan(
+			&item.AccountID,
+			&item.Username,
+			&item.WalletAddress,
+			&item.Status,
+			&item.Roles,
+			&item.CreatedAt,
+			&item.LastLoginAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
 }
 
 func (s *PostgresStore) SetBanned(accountID int64, banned bool) error {

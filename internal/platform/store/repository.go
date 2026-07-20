@@ -16,6 +16,7 @@ type Repository interface {
 	SetBanned(accountID int64, banned bool) error
 	SetAccountBan(accountID int64, banned bool, reason string) error
 	AdminGetAccount(accountID int64, wallet string) (AdminAccountDetail, error)
+	ListAdminAccountSelector(filter AdminAccountSelectorFilter) ([]AdminAccountSelectorItem, error)
 	ListAdminCharacters(filter AdminCharacterListFilter) ([]AdminCharacterSummary, error)
 	AdminCharacterDetail(characterID int64) (AdminCharacterDetail, error)
 	ListCharacterLedger(characterID int64, kind string, limit, offset int) ([]LedgerEntry, error)

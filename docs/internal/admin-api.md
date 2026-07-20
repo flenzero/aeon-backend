@@ -54,6 +54,7 @@ until the Core adapter is configured.
 
 | Method | Path | Notes |
 | --- | --- | --- |
+| `GET` | `/api/admin/accounts/selector?keyword=&status=` | Selector list: account option with comma-separated character names in `roles` |
 | `GET` | `/api/admin/accounts?accountId=` or `?wallet=` | Detail: status, risk, ban reason, license, active market restrictions |
 | `POST` | `/api/admin/accounts/ban` | `{ accountId, banned, reason, adminId }` — writes `ban_reason` + risk event |
 | `POST` | `/api/admin/accounts/risk-level` | `{ accountId, riskLevel, reason }` |
@@ -73,7 +74,7 @@ console. They do not require player-side Service Identity headers.
 | `GET` | `/api/admin/characters/{characterId}/audits` | Character/account-related admin audit rows |
 | `GET` | `/api/admin/characters/{characterId}/timeline?types=ledger,audit,risk` | Merged ledger/audit/risk timeline |
 | `GET` | `/api/admin/equipment/{equipmentUid}` | Equipment owner, NFT and marketplace status by UID |
-| `GET` | `/api/admin/catalog/items?grouped=true` | Current Economy config item picker catalog; equipment grant quantity is `1` |
+| `GET` | `/api/admin/catalog/items?grouped=true` | Current Economy config item picker catalog; template equipment is listed per rarity and equipment grant quantity is `1` |
 
 ## Market restrictions
 
@@ -154,7 +155,7 @@ original result rather than performing the write again.
 | `GET` | `/api/admin/ops/payments/economy-orders/{orderId}/trace` |
 | `POST` | `/api/admin/ops/payments/economy-orders/{orderId}/recover` |
 
-奖励使用 Aeonblight 的 Gold 和 AEB 余额类别：`gold`、`withdrawableAeb`、`lockedAeb`、`items`。`items[]` 支持 `itemId`、`quantity`，装备还可带 `rarity` 指定星级。物品和装备始终进入 Loot Tray；发放、经济账本、审计和幂等结果是同一 PostgreSQL 事务。直接发奖默认不生成稀有奖励公告；如果请求带 `announceRare:true`，则必须同时提供 `announcementSource`，用于公告中的奖励途径。
+奖励使用 Aeonblight 的 Gold 和 AEB 余额类别：`gold`、`withdrawableAeb`、`lockedAeb`、`items`。`items[]` 支持 `itemId`、`quantity`，装备还可带 `rarity` 指定星级；Catalog 会把装备模板按当前品质配置展开为 `itemId + rarity` 选项，`grouped=true` 返回完整分组。物品和装备始终进入 Loot Tray；发放、经济账本、审计和幂等结果是同一 PostgreSQL 事务。直接发奖默认不生成稀有奖励公告；如果请求带 `announceRare:true`，则必须同时提供 `announcementSource`，用于公告中的奖励途径。
 
 补偿先以联合筛选条件创建 30 分钟有效的 Preview，再以该 `previewId` 提交。实际执行在一笔事务内按 250 名角色分批；其中任意角色无法发放时全部回滚。Payment Recovery 只处理已有链上收据的 `SUBMITTED`/`CONFIRMED` 订单，不能伪造交易签名，也不会重放已完成订单。
 

@@ -38,7 +38,7 @@ func TestEveryHTTPRouteIsRegisteredAndGuarded(t *testing.T) {
 	}{
 		{"account-api", account.NewHandler(cfg, st).Routes(), accountEndpoints(), 32},
 		{"economy-api", economy.NewHandler(cfg, st).Routes(), economyEndpoints(), 55},
-		{"admin-api", admin.NewHandler(cfg, st).Routes(), adminEndpoints(), 58},
+		{"admin-api", admin.NewHandler(cfg, st).Routes(), adminEndpoints(), 59},
 	}
 
 	for _, service := range tests {
@@ -121,6 +121,15 @@ func TestAccountEconomyAdminHTTPWorkflow(t *testing.T) {
 	doHandlerJSON(t, adminHandler, http.MethodGet, "/api/admin/accounts?accountId="+fmt.Sprint(login.Account.ID), nil, adminHeaders, http.StatusOK, &detail)
 	if detail.ID != login.Account.ID {
 		t.Fatalf("admin account=%+v", detail)
+	}
+
+	var accountSelector struct {
+		Items []store.AdminAccountSelectorItem `json:"items"`
+		Count int                              `json:"count"`
+	}
+	doHandlerJSON(t, adminHandler, http.MethodGet, "/api/admin/accounts/selector?keyword=ContractHero", nil, adminHeaders, http.StatusOK, &accountSelector)
+	if accountSelector.Count != 1 || accountSelector.Items[0].AccountID != login.Account.ID || accountSelector.Items[0].Roles != "ContractHero" {
+		t.Fatalf("admin account selector=%+v", accountSelector)
 	}
 
 	var characters struct {
@@ -369,7 +378,7 @@ func adminEndpoints() []endpoint {
 	paths := []struct{ method, path string }{
 		{"GET", "/api/admin/auth/nonce"}, {"POST", "/api/admin/auth/login"},
 		{"GET", "/api/admin/admin-users"}, {"POST", "/api/admin/admin-users"}, {"DELETE", "/api/admin/admin-users/ops-01"},
-		{"GET", "/api/admin/accounts"}, {"POST", "/api/admin/accounts/ban"}, {"POST", "/api/admin/accounts/risk-level"}, {"POST", "/api/admin/accounts/license"}, {"POST", "/api/admin/accounts/sessions/revoke"},
+		{"GET", "/api/admin/accounts/selector"}, {"GET", "/api/admin/accounts"}, {"POST", "/api/admin/accounts/ban"}, {"POST", "/api/admin/accounts/risk-level"}, {"POST", "/api/admin/accounts/license"}, {"POST", "/api/admin/accounts/sessions/revoke"},
 		{"GET", "/api/admin/characters"}, {"GET", "/api/admin/characters/1"}, {"GET", "/api/admin/characters/1/ledger"}, {"GET", "/api/admin/characters/1/audits"}, {"GET", "/api/admin/characters/1/timeline"},
 		{"GET", "/api/admin/equipment/equipment-1"},
 		{"GET", "/api/admin/catalog/items"},

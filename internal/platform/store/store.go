@@ -733,6 +733,77 @@ func (s *Store) AdminGetAccount(accountID int64, wallet string) (AdminAccountDet
 	}, nil
 }
 
+func (s *Store) ListAdminAccountSelector(filter AdminAccountSelectorFilter) ([]AdminAccountSelectorItem, error) {
+	filter, err := normalizeAdminAccountSelectorFilter(filter)
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	keyword := strings.ToLower(filter.Keyword)
+	matches := []AdminAccountSelectorItem{}
+	for _, account := range s.accounts {
+		status := "ACTIVE"
+		if account.IsBanned {
+			status = "BANNED"
+		}
+		if filter.Status != "" && status != filter.Status {
+			continue
+		}
+		roles := []Character{}
+		for _, character := range s.characters {
+			if character.AccountID == account.ID && !character.Deleted {
+				roles = append(roles, *character)
+			}
+		}
+		sort.Slice(roles, func(i, j int) bool {
+			if roles[i].SlotIndex == roles[j].SlotIndex {
+				return roles[i].ID < roles[j].ID
+			}
+			return roles[i].SlotIndex < roles[j].SlotIndex
+		})
+		roleNames := make([]string, 0, len(roles))
+		for _, role := range roles {
+			roleNames = append(roleNames, role.Name)
+		}
+		roleText := strings.Join(roleNames, ",")
+		if keyword != "" {
+			haystack := strings.ToLower(strings.Join([]string{
+				strconv.FormatInt(account.ID, 10),
+				account.Username,
+				account.WalletAddress,
+				roleText,
+			}, " "))
+			if !strings.Contains(haystack, keyword) {
+				continue
+			}
+		}
+		matches = append(matches, AdminAccountSelectorItem{
+			AccountID:     account.ID,
+			Username:      account.Username,
+			WalletAddress: account.WalletAddress,
+			Status:        status,
+			Roles:         roleText,
+			CreatedAt:     account.CreatedAt,
+			LastLoginAt:   account.LastLoginAt,
+		})
+	}
+	sort.Slice(matches, func(i, j int) bool {
+		if matches[i].LastLoginAt.Equal(matches[j].LastLoginAt) {
+			return matches[i].AccountID > matches[j].AccountID
+		}
+		return matches[i].LastLoginAt.After(matches[j].LastLoginAt)
+	})
+	if filter.Offset >= len(matches) {
+		return []AdminAccountSelectorItem{}, nil
+	}
+	end := filter.Offset + filter.Limit
+	if end > len(matches) {
+		end = len(matches)
+	}
+	return append([]AdminAccountSelectorItem(nil), matches[filter.Offset:end]...), nil
+}
+
 func (s *Store) ListAdminCharacters(filter AdminCharacterListFilter) ([]AdminCharacterSummary, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -2,9 +2,9 @@ package account
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -167,7 +167,7 @@ func TestLaunchIsAccountLevelAndReturnsSelectedServer(t *testing.T) {
 	}
 	cfg := config.Config{
 		ServiceName: "account-api-test", JWTSecret: "test-jwt", InternalKey: "test-internal", Profile: config.ProfileTest,
-		GameClientBaseURL: "https://client.example.com/play",
+		GameClientBaseURL: "https://launch-entry.example.com/custom-api?source=home",
 	}
 	handler := NewHandler(cfg, st).Routes()
 
@@ -189,44 +189,56 @@ func TestLaunchIsAccountLevelAndReturnsSelectedServer(t *testing.T) {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
 	}
 	var response struct {
-		OK   bool `json:"ok"`
-		Data struct {
-			Status         string `json:"status"`
-			Ticket         string `json:"ticket"`
-			ServerID       string `json:"serverId"`
-			Host           string `json:"host"`
-			Port           int    `json:"port"`
-			PublicEndpoint string `json:"publicEndpoint"`
-			WalletAddress  string `json:"walletAddress"`
-			WalletPlugin   string `json:"walletPlugin"`
-			GameURL        string `json:"gameUrl"`
-		} `json:"data"`
+		OK   bool           `json:"ok"`
+		Data map[string]any `json:"data"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &response); err != nil {
 		t.Fatal(err)
 	}
-	if !response.OK || response.Data.Status != "ready" || response.Data.Ticket == "" || response.Data.ServerID != "world-a" {
+	ticket, _ := response.Data["ticket"].(string)
+	if !response.OK || response.Data["status"] != "ready" || ticket == "" || response.Data["serverId"] != "world-a" {
 		t.Fatalf("response=%+v", response)
 	}
-	if response.Data.Host != "game.example.com" || response.Data.Port != 7777 || response.Data.PublicEndpoint != "wss://game.example.com" {
+	if response.Data["host"] != "game.example.com" || response.Data["port"] != float64(7777) {
 		t.Fatalf("server launch data=%+v", response.Data)
 	}
-	if response.Data.WalletAddress != "launch_http_wallet" || response.Data.WalletPlugin != "phantom" {
-		t.Fatalf("wallet launch data=%+v", response.Data)
-	}
-	for _, want := range []string{
-		"ticket=" + response.Data.Ticket,
-		"serverId=world-a",
-		"host=game.example.com",
-		"port=7777",
-		"walletAddress=launch_http_wallet",
-		"walletPlugin=phantom",
-	} {
-		if !strings.Contains(response.Data.GameURL, want) {
-			t.Fatalf("gameUrl=%q missing %s", response.Data.GameURL, want)
+	for _, forbidden := range []string{"publicEndpoint"} {
+		if _, ok := response.Data[forbidden]; ok {
+			t.Fatalf("launch leaked %s: %+v", forbidden, response.Data)
 		}
 	}
-	if !strings.HasPrefix(response.Data.GameURL, fmt.Sprintf("%s?", cfg.GameClientBaseURL)) {
-		t.Fatalf("gameUrl=%q", response.Data.GameURL)
+	if response.Data["walletAddress"] != "launch_http_wallet" || response.Data["walletPlugin"] != "phantom" {
+		t.Fatalf("wallet launch data=%+v", response.Data)
+	}
+	gameURL, _ := response.Data["gameUrl"].(string)
+	parsedGameURL, err := url.Parse(gameURL)
+	if err != nil {
+		t.Fatalf("gameUrl=%q parse: %v", gameURL, err)
+	}
+	query := parsedGameURL.Query()
+	for key, want := range map[string]string{
+		"ticket":        ticket,
+		"serverId":      "world-a",
+		"host":          "game.example.com",
+		"port":          "7777",
+		"walletAddress": "launch_http_wallet",
+		"walletPlugin":  "phantom",
+		"source":        "home",
+	} {
+		if got := query.Get(key); got != want {
+			t.Fatalf("gameUrl=%q query %s=%q want %q", gameURL, key, got, want)
+		}
+	}
+	for _, forbidden := range []string{"publicEndpoint"} {
+		if query.Has(forbidden) {
+			t.Fatalf("gameUrl=%q leaked %s", gameURL, forbidden)
+		}
+	}
+	baseURL, err := url.Parse(cfg.GameClientBaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if parsedGameURL.Scheme != baseURL.Scheme || parsedGameURL.Host != baseURL.Host || parsedGameURL.Path != baseURL.Path {
+		t.Fatalf("gameUrl=%q changed base URL %q", gameURL, cfg.GameClientBaseURL)
 	}
 }

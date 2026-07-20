@@ -177,6 +177,20 @@ func equipmentDisplayTypes(cfg *rules.Config) map[string]string {
 	return out
 }
 
+func equipmentCatalogRarities(cfg *rules.Config) []int {
+	if cfg == nil {
+		return nil
+	}
+	rarities := make([]int, 0, len(cfg.Equipment.Rarities))
+	for rarity := range cfg.Equipment.Rarities {
+		if rarity > 0 {
+			rarities = append(rarities, rarity)
+		}
+	}
+	sort.Ints(rarities)
+	return rarities
+}
+
 func (h *Handler) catalogVersion() string {
 	if h.rules == nil {
 		return ""
@@ -200,6 +214,7 @@ func (h *Handler) catalogVersion() string {
 
 func (h *Handler) catalogItems() []adminCatalogItem {
 	displayTypes := equipmentDisplayTypes(h.rules)
+	equipmentRarities := equipmentCatalogRarities(h.rules)
 	items := make([]adminCatalogItem, 0, len(h.rules.Items))
 	for _, item := range h.rules.Items {
 		item.ItemID = strings.TrimSpace(item.ItemID)
@@ -253,6 +268,13 @@ func (h *Handler) catalogItems() []adminCatalogItem {
 				label = equipmentSlotLabel(slot)
 				row.EquipmentSlot = &slot
 				row.EquipmentSlotLabel = &label
+				for _, rarity := range equipmentRarities {
+					variant := row
+					variant.Rarity = rarity
+					variant.RarityLabel = rarityLabel(h.rules, rarity, true)
+					items = append(items, variant)
+				}
+				continue
 			}
 		}
 		items = append(items, row)
@@ -260,6 +282,9 @@ func (h *Handler) catalogItems() []adminCatalogItem {
 	sort.Slice(items, func(i, j int) bool {
 		if items[i].Category == items[j].Category {
 			if items[i].DisplayName == items[j].DisplayName {
+				if items[i].ItemID == items[j].ItemID {
+					return items[i].Rarity < items[j].Rarity
+				}
 				return items[i].ItemID < items[j].ItemID
 			}
 			return items[i].DisplayName < items[j].DisplayName
@@ -356,15 +381,6 @@ func (h *Handler) listCatalogItems(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	total := len(items)
-	if offset > len(items) {
-		items = []adminCatalogItem{}
-	} else {
-		end := offset + limit
-		if end > len(items) {
-			end = len(items)
-		}
-		items = items[offset:end]
-	}
 	grouped, err := optionalBoolQuery(r, "grouped")
 	if err != nil {
 		httpx.Error(w, http.StatusBadRequest, 400, err.Error())
@@ -375,12 +391,21 @@ func (h *Handler) listCatalogItems(w http.ResponseWriter, r *http.Request) {
 			"configVersion": h.catalogVersion(),
 			"groups":        groupedCatalogItems(items),
 			"categories":    adminCatalogCategories,
-			"count":         len(items),
+			"count":         total,
 			"total":         total,
-			"limit":         limit,
-			"offset":        offset,
+			"limit":         total,
+			"offset":        0,
 		})
 		return
+	}
+	if offset > len(items) {
+		items = []adminCatalogItem{}
+	} else {
+		end := offset + limit
+		if end > len(items) {
+			end = len(items)
+		}
+		items = items[offset:end]
 	}
 	httpx.OK(w, map[string]any{
 		"configVersion": h.catalogVersion(),

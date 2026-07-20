@@ -40,6 +40,7 @@ func (h *Handler) Routes() http.Handler {
 	mux.HandleFunc("GET /api/admin/admin-users", httpx.RequireSuperAdmin(h.cfg, h.store, h.listAdminUsers))
 	mux.HandleFunc("DELETE /api/admin/admin-users/{adminId}", httpx.RequireSuperAdmin(h.cfg, h.store, h.disableAdminUser))
 
+	mux.HandleFunc("GET /api/admin/accounts/selector", httpx.RequireAdmin(h.cfg, h.store, h.listAccountSelector))
 	mux.HandleFunc("GET /api/admin/accounts", httpx.RequireAdmin(h.cfg, h.store, h.getAccount))
 	mux.HandleFunc("POST /api/admin/accounts/ban", httpx.RequireAdmin(h.cfg, h.store, h.banAccount))
 	mux.HandleFunc("POST /api/admin/accounts/risk-level", httpx.RequireAdmin(h.cfg, h.store, h.setRiskLevel))
@@ -355,6 +356,30 @@ func writeStoreErr(w http.ResponseWriter, err error) {
 		return
 	}
 	httpx.Error(w, http.StatusBadRequest, 4001, err.Error())
+}
+
+func (h *Handler) listAccountSelector(w http.ResponseWriter, r *http.Request) {
+	limit, offset, err := httpx.Pagination(r, 50, 200)
+	if err != nil {
+		httpx.Error(w, http.StatusBadRequest, 400, err.Error())
+		return
+	}
+	status, ok := validateAccountStatus(r.URL.Query().Get("status"))
+	if !ok {
+		httpx.Error(w, http.StatusBadRequest, 400, "status must be ACTIVE, BANNED, FROZEN, or DELETED")
+		return
+	}
+	rows, err := h.store.ListAdminAccountSelector(store.AdminAccountSelectorFilter{
+		Keyword: r.URL.Query().Get("keyword"),
+		Status:  status,
+		Limit:   limit,
+		Offset:  offset,
+	})
+	if err != nil {
+		writeStoreErr(w, err)
+		return
+	}
+	httpx.OK(w, map[string]any{"items": rows, "count": len(rows), "limit": limit, "offset": offset})
 }
 
 func (h *Handler) getAccount(w http.ResponseWriter, r *http.Request) {

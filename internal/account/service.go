@@ -68,17 +68,16 @@ type WalletLoginResult struct {
 }
 
 type LaunchResult struct {
-	Status         string    `json:"status"`
-	Ticket         string    `json:"ticket"`
-	ExpiresIn      int64     `json:"expiresIn"`
-	ExpiresAt      time.Time `json:"expiresAt"`
-	ServerID       string    `json:"serverId"`
-	Host           string    `json:"host"`
-	Port           int       `json:"port"`
-	PublicEndpoint string    `json:"publicEndpoint,omitempty"`
-	WalletAddress  string    `json:"walletAddress"`
-	WalletPlugin   string    `json:"walletPlugin,omitempty"`
-	GameURL        string    `json:"gameUrl,omitempty"`
+	Status        string    `json:"status"`
+	Ticket        string    `json:"ticket"`
+	ExpiresIn     int64     `json:"expiresIn"`
+	ExpiresAt     time.Time `json:"expiresAt"`
+	ServerID      string    `json:"serverId"`
+	Host          string    `json:"host"`
+	Port          int       `json:"port"`
+	WalletAddress string    `json:"walletAddress"`
+	WalletPlugin  string    `json:"walletPlugin,omitempty"`
+	GameURL       string    `json:"gameUrl,omitempty"`
 }
 
 type DungeonRecoveryDecision struct {
@@ -264,7 +263,9 @@ func (s *Service) Launch(accountID int64, sessionID, serverID string) (LaunchRes
 	})
 	return LaunchResult{
 		Status: "ready", Ticket: ticket, ExpiresIn: expiresIn, ExpiresAt: expiresAt,
-		ServerID: server.ServerID, Host: server.Host, Port: server.Port, PublicEndpoint: server.PublicEndpoint,
+		ServerID:      server.ServerID,
+		Host:          server.Host,
+		Port:          server.Port,
 		WalletAddress: account.WalletAddress, WalletPlugin: strings.TrimSpace(session.WalletPlugin),
 	}, nil
 }
