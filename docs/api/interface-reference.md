@@ -80,7 +80,11 @@ X-Service-Signature: <base58-ed25519-signature>
 
 ### 2.1 EconomySnapshot
 
-主要字段：`accountId`、`characterId`、`gold`、`gems`、`stamina`、`bagSlots`、`bagExpandCount`、`hasLicense`、`level`、`exp`、`accountToken`、`inventory`、`warehouse`、`lootTray`、`equipmentItems`。
+主要字段：`accountId`、`characterId`、`gold`、`gems`、`stamina`、`bagSlots`、`bagExpandCount`、`hasLicense`、`level`、`exp`、`expToNextLevel`、`highestClearedChapterId`、`highestClearedFloorId`、`accountToken`、`inventory`、`warehouse`、`lootTray`、`equipmentItems`。
+
+`exp` 是累计总经验；`expToNextLevel` 是距离下一等级累计阈值的剩余经验，满级时为 `-1` 且 `exp` 继续累计。
+
+`highestClearedChapterId`、`highestClearedFloorId` 是角色副本最高通关进度；`POST /api/economy/dungeon/finish` 仅在 `result="victory"` 时推进该进度，较低章节/层不会回退。
 
 `accountToken`：`tokenBalance`、`withdrawableBalance`、`lockedBalance`、`externalBalance`、`unlockCredit`。
 
@@ -461,7 +465,7 @@ Body：`{"opId":"repair-01","characterId":10,"equipmentUid":"eq_..."}`。
 
 - 认证：`economy.gameplay`。
 - 仅允许背包内、当前装备模板的非 NFT 装备。已存在 `MINT_REQUESTED` 或 `MINTED` NFT Asset 的装备一律拒绝。
-- 回收价只由装备模板的阶段与品质配置决定，不受副词条或强化影响；服务端将金币加入角色钱包。
+- 回收价只由装备模板 `sellPriceGoldByStage` 的阶段与品质配置决定，不受副词条或强化影响；服务端将金币加入角色钱包。
 - 装备状态变为 `NPC_RECYCLED`，不再出现在经济快照中；返回 `goldCredit`、`expiresAt`、`snapshot`。
 - `expiresAt` 固定为回收后 7 天。在窗口到期前仅可由后续超级管理员恢复能力处理；到期物理删除后不可回溯。错误 code `3603`。
 
@@ -518,7 +522,7 @@ Body：`{"opId":"buy-01","characterId":10,"shopId":"shop","itemId":"ashwood_whit
 装备 Body：`{"opId":"sell-eq-01","characterId":10,"shopId":"shop","equipmentUid":"eq_..."}`。
 
 - 认证：`economy.gameplay`。
-- 出售价由 `items.json` 的 `sellPrice` 决定；`sellPrice=0` 或未配置时拒绝成交。
+- 普通物品出售价由 `items.json` 的 `sellPrice` 决定；装备出售价由 `equipment_templates.json` 的 `sellPriceGoldByStage` 按装备阶段和品质决定。价格为 0 或未配置时拒绝成交。
 - 普通物品必须在背包指定槽；装备必须是背包内非 NFT 装备。成功后资产变为 `CONSUMED` 并给角色金币，返回 `snapshot`。
 
 #### POST `/api/economy/lottery/draw`
@@ -643,6 +647,7 @@ Body：`{"opId":"mint-cancel-01","requestId":1001}`。
 Body：`{"opId":"gather-01","characterId":10,"nodeId":"iron-node"}`。
 
 - 根据 `nodeId` 配置生成奖励；物品/装备进入背包，AEB 进入 Locked AEB。
+- 同一角色同一 `nodeId` 必须等待该节点配置的 `respawnSeconds` 后才能再次结算。
 - 成功：`activityId`、`activityType`、`rewards`、`snapshot`；错误 code `3301`。
 
 #### POST `/api/economy/farming/harvest`

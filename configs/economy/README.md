@@ -17,7 +17,7 @@ Files:
 - `dungeons.json`: chapter/floor entry costs, exp caps, reward pools, and combat scale passthrough.
 - `loot_pools.json`: reusable reward pools for dungeons, gathering and farming.
 - `equipment_affixes.json`: random equipment affix pools.
-- `equipment_templates.json`: equipment series/stages, rarity multipliers, enhancement and NPC recycle.
+- `equipment_templates.json`: equipment series/stages, rarity multipliers, sell/recycle prices and enhancement.
 - `gathering.json`: gather node reward configuration.
 - `farming.json`: farming crop and harvest reward configuration.
 - `bosses.json`: global boss reward pools and contribution tiers.
@@ -39,10 +39,14 @@ Prices live on `items.json` rows:
 
 - `buyCurrency`: `0` = gold, `1` = AEB chain payment order.
 - `buyPrice`: unit purchase price; runtime purchase rejects zero-priced rows.
-- `sellPrice`: unit gold credit when selling an inventory item or in-bag
-  equipment to a shop; runtime sale rejects zero-priced rows.
+- `sellPrice`: unit gold credit when selling an inventory item to a shop;
+  runtime sale rejects zero-priced rows.
 - `grantGold`: optional gold granted after purchase instead of creating an
   inventory/equipment item.
+
+Generated equipment sell prices live in `equipment_templates.json` as
+`sellPriceGoldByStage`: the first key is the equipment stage, the nested key is
+rarity. Shop selling and NPC recycle both use this stage/rarity table.
 
 ## Equipment enums
 
@@ -102,10 +106,18 @@ Design notes:
   and equipment drops use one shape.
 - Equipment rewards generate unique backend-owned equipment instances with
   affixes. The client should treat `equipmentUid` as the stable instance ID.
+- Generated equipment sell prices are based on the template stage and instance
+  rarity via `sellPriceGoldByStage`; legacy item-row weapon prices are not used.
 - Dungeon rewards enter the loot tray and require a later claim.
 - Gathering and farming rewards are collection-style rewards: items and
   equipment go directly into the bag, while token rewards still become locked
   AEB records.
+- Gathering nodes enforce `respawnSeconds` as the minimum settlement interval
+  for the same character and the same `nodeId`.
+- Fishing is modeled as a gathering node with `nodeType=fishing`. Its equipment
+  drops can use `equipmentStageMode=character_level_floor`, which picks the
+  nearest configured equipment stage at or below the character level before
+  rolling a template from `equipmentSeries`.
 - Boss rewards enter the loot tray and use participation plus contribution
   tiers. Token rewards still become locked AEB records.
 - NFT Mint uses AEB and is versioned by rarity in `economy_rules.json`: rarity

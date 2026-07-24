@@ -145,11 +145,10 @@ func (s *Service) EquipmentNPCRecycle(opID string, accountID, characterID int64,
 		if equipment.NFTContract != nil {
 			return store.EquipmentNPCRecycleResult{}, errors.New("nft-linked equipment cannot be sold to an npc")
 		}
-		template, ok := s.economyRules.EquipmentTemplate(equipment.ItemID)
-		if !ok {
+		if _, ok := s.economyRules.EquipmentTemplate(equipment.ItemID); !ok {
 			return store.EquipmentNPCRecycleResult{}, errors.New("only current equipment templates can be sold to an npc")
 		}
-		gold, ok := template.NPCRecycleGold[equipment.Rarity]
+		gold, ok := s.economyRules.EquipmentSellPriceGold(equipment.ItemID, equipment.Rarity)
 		if !ok {
 			return store.EquipmentNPCRecycleResult{}, errors.New("npc recycle value is not configured")
 		}
@@ -731,11 +730,11 @@ func (s *Service) shopSellEquipment(opID string, accountID, characterID int64, s
 	if equipment.NFTContract != nil {
 		return store.ShopSellResult{}, errors.New("nft-linked equipment cannot be sold to a shop")
 	}
-	item, ok := s.economyRules.Items[equipment.ItemID]
-	if !ok {
-		return store.ShopSellResult{}, errors.New("equipment item is not configured")
+	if _, ok := s.economyRules.EquipmentTemplate(equipment.ItemID); !ok {
+		return store.ShopSellResult{}, errors.New("only current equipment templates can be sold to a shop")
 	}
-	if item.SellPrice <= 0 {
+	gold, ok := s.economyRules.EquipmentSellPriceGold(equipment.ItemID, equipment.Rarity)
+	if !ok {
 		return store.ShopSellResult{}, errors.New("sell price is not configured")
 	}
 	result, err := s.store.ShopSell(store.ShopSellRequest{
@@ -745,7 +744,7 @@ func (s *Service) shopSellEquipment(opID string, accountID, characterID int64, s
 		ShopID:       strings.TrimSpace(shopID),
 		EquipmentUID: strings.TrimSpace(equipmentUID),
 		Quantity:     1,
-		GoldCredit:   item.SellPrice,
+		GoldCredit:   gold,
 	})
 	if err != nil {
 		return store.ShopSellResult{}, err
@@ -808,11 +807,17 @@ func (s *Service) DungeonEnter(req store.DungeonEnterRequest) (store.DungeonResu
 	if s.rulesErr != nil {
 		return store.DungeonResult{}, s.rulesErr
 	}
-	if floor, ok := s.economyRules.DungeonFloor(req.ChapterID, req.FloorID); ok {
-		req.IsBoss = floor.IsBoss
-		req.Cost = floor.EnterCost
+	floor, ok := s.economyRules.DungeonFloor(req.ChapterID, req.FloorID)
+	if !ok {
+		return store.DungeonResult{}, fmt.Errorf("dungeon floor %d/%d is not configured", req.ChapterID, req.FloorID)
 	}
-	return s.store.DungeonEnter(req)
+	req.IsBoss = floor.IsBoss
+	req.Cost = floor.EnterCost
+	result, err := s.store.DungeonEnter(req)
+	if err != nil {
+		return store.DungeonResult{}, err
+	}
+	return s.resolveDungeonResult(result)
 }
 
 func (s *Service) DungeonFinish(req store.DungeonFinishRequest) (store.DungeonResult, error) {
@@ -825,6 +830,7 @@ func (s *Service) DungeonFinish(req store.DungeonFinishRequest) (store.DungeonRe
 		return store.DungeonResult{}, err
 	}
 	req.RewardPlan = plan
+	req.LevelProgression = s.economyRules.LevelProgressionRules()
 	eq := s.economyRules.EquipmentRules()
 	req.EquipmentWearPoints = eq.DungeonWearPoints
 	req.DefaultMaxDurability = eq.DefaultMaxDurability
@@ -864,6 +870,14 @@ func (s *Service) GatheringSettle(req store.ActivitySettlementRequest) (store.Ac
 		return store.ActivitySettlementResult{}, s.rulesErr
 	}
 	req.ActivityType = "gathering"
+	snapshot, err := s.store.EconomySnapshot(req.AccountID, req.CharacterID)
+	if err != nil {
+		return store.ActivitySettlementResult{}, err
+	}
+	req.CharacterLevel = snapshot.Level
+	if node, ok := s.economyRules.GatherNodes[strings.TrimSpace(req.ActivityID)]; ok {
+		req.RespawnSeconds = node.RespawnSeconds
+	}
 	plan, err := s.economyRules.GatheringRewards(req)
 	if err != nil {
 		return store.ActivitySettlementResult{}, err
@@ -877,6 +891,7 @@ func (s *Service) GatheringSettle(req store.ActivitySettlementRequest) (store.Ac
 	if err != nil {
 		return store.ActivitySettlementResult{}, err
 	}
+	result.Rewards = rewardProgress(result.Rewards, result.Snapshot)
 	return result, nil
 }
 
@@ -898,6 +913,7 @@ func (s *Service) FarmingHarvest(req store.ActivitySettlementRequest) (store.Act
 	if err != nil {
 		return store.ActivitySettlementResult{}, err
 	}
+	result.Rewards = rewardProgress(result.Rewards, result.Snapshot)
 	return result, nil
 }
 
@@ -932,6 +948,7 @@ func (s *Service) BossSettle(req store.BossSettleRequest) (store.BossSettleResul
 	if err != nil {
 		return store.BossSettleResult{}, err
 	}
+	result.Rewards = rewardProgress(result.Rewards, result.Snapshot)
 	return result, nil
 }
 
@@ -1032,6 +1049,9 @@ func (s *Service) resolveSnapshot(snapshot store.EconomySnapshot) (store.Economy
 		return snapshot, s.rulesErr
 	}
 	snapshot.BagSlots = s.economyRules.EffectiveBagSlots(snapshot.BagExpandCount)
+	progress := s.economyRules.LevelProgress(snapshot.Level, snapshot.Exp)
+	snapshot.Level = progress.Level
+	snapshot.ExpToNextLevel = progress.ExpToNextLevel
 	for index, equipment := range snapshot.Equipment {
 		resolved, err := s.economyRules.ResolveEquipmentItem(equipment)
 		if err != nil {
@@ -1048,6 +1068,7 @@ func (s *Service) resolveDungeonResult(result store.DungeonResult) (store.Dungeo
 	if err != nil {
 		return store.DungeonResult{}, err
 	}
+	result.Rewards = rewardProgress(result.Rewards, result.Snapshot)
 	for index, equipment := range result.Rewards.EquipmentItems {
 		resolved, err := s.economyRules.ResolveEquipmentItem(equipment)
 		if err != nil {
@@ -1056,6 +1077,12 @@ func (s *Service) resolveDungeonResult(result store.DungeonResult) (store.Dungeo
 		result.Rewards.EquipmentItems[index] = resolved
 	}
 	return result, nil
+}
+
+func rewardProgress(rewards store.DungeonRewards, snapshot store.EconomySnapshot) store.DungeonRewards {
+	rewards.Level = snapshot.Level
+	rewards.ExpToNextLevel = snapshot.ExpToNextLevel
+	return rewards
 }
 
 func (s *Service) marketplaceRules() store.MarketplaceRules {

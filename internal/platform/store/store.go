@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -63,8 +64,67 @@ type DungeonFinishRequest struct {
 	Kills                []DungeonKill
 	Progress             map[string]any
 	RewardPlan           DungeonRewardPlan
+	LevelProgression     LevelProgressionRules
 	EquipmentWearPoints  int
 	DefaultMaxDurability int
+}
+
+type LevelProgressionRules struct {
+	MaxLevel  int
+	Base      int64
+	Linear    int64
+	Quadratic int64
+}
+
+type LevelProgress struct {
+	Level          int
+	LevelsGained   int
+	ExpToNextLevel int64
+}
+
+func (r LevelProgressionRules) Progress(currentLevel int, exp int64) LevelProgress {
+	if currentLevel <= 0 {
+		currentLevel = 1
+	}
+	if exp < 0 {
+		exp = 0
+	}
+	if !r.enabled() {
+		return LevelProgress{Level: currentLevel}
+	}
+	level := currentLevel
+	for r.MaxLevel <= 0 || level < r.MaxLevel {
+		nextThreshold := r.expRequiredToReachLevel(level + 1)
+		if nextThreshold <= 0 || exp < nextThreshold {
+			return LevelProgress{Level: level, LevelsGained: level - currentLevel, ExpToNextLevel: nextThreshold - exp}
+		}
+		level++
+	}
+	return LevelProgress{Level: level, LevelsGained: level - currentLevel, ExpToNextLevel: -1}
+}
+
+func (r LevelProgressionRules) ExpToNextLevel(level int, exp int64) int64 {
+	return r.Progress(level, exp).ExpToNextLevel
+}
+
+func (r LevelProgressionRules) enabled() bool {
+	return r.MaxLevel > 0 && (r.Base > 0 || r.Linear > 0 || r.Quadratic > 0)
+}
+
+func (r LevelProgressionRules) expRequiredToReachLevel(level int) int64 {
+	if level <= 1 {
+		return 0
+	}
+	var total int64
+	for currentLevel := 1; currentLevel < level; currentLevel++ {
+		total += r.expRequiredForNextLevel(currentLevel)
+	}
+	return total
+}
+
+func (r LevelProgressionRules) expRequiredForNextLevel(level int) int64 {
+	currentLevel := int64(level)
+	return r.Base + r.Linear*currentLevel + r.Quadratic*currentLevel*currentLevel
 }
 
 type DungeonKill struct {
@@ -143,12 +203,14 @@ type LootActionRequest struct {
 }
 
 type ActivitySettlementRequest struct {
-	OpID         string
-	AccountID    int64
-	CharacterID  int64
-	ActivityID   string
-	ActivityType string
-	RewardPlan   DungeonRewardPlan
+	OpID           string
+	AccountID      int64
+	CharacterID    int64
+	CharacterLevel int
+	ActivityID     string
+	ActivityType   string
+	RespawnSeconds int
+	RewardPlan     DungeonRewardPlan
 }
 
 type ActivitySettlementResult struct {
@@ -237,33 +299,37 @@ type WalletLoginNonce struct {
 }
 
 type Character struct {
-	ID             int64           `json:"id"`
-	AccountID      int64           `json:"accountId"`
-	Name           string          `json:"name"`
-	SlotIndex      int             `json:"slotIndex"`
-	Level          int             `json:"level"`
-	Appearance     map[string]any  `json:"appearance"`
-	EquipmentItems []EquipmentItem `json:"equipmentItems,omitempty"`
-	CreatedAt      time.Time       `json:"createdAt"`
-	LastPlayed     time.Time       `json:"lastPlayed"`
-	HasLastPlayed  bool            `json:"hasLastPlayed"`
-	Deleted        bool            `json:"deleted"`
+	ID                      int64           `json:"id"`
+	AccountID               int64           `json:"accountId"`
+	Name                    string          `json:"name"`
+	SlotIndex               int             `json:"slotIndex"`
+	Level                   int             `json:"level"`
+	Exp                     int64           `json:"exp,omitempty"`
+	HighestClearedChapterID int             `json:"highestClearedChapterId,omitempty"`
+	HighestClearedFloorID   int             `json:"highestClearedFloorId,omitempty"`
+	Appearance              map[string]any  `json:"appearance"`
+	EquipmentItems          []EquipmentItem `json:"equipmentItems,omitempty"`
+	CreatedAt               time.Time       `json:"createdAt"`
+	LastPlayed              time.Time       `json:"lastPlayed"`
+	HasLastPlayed           bool            `json:"hasLastPlayed"`
+	Deleted                 bool            `json:"deleted"`
 }
 
 type PlayerState struct {
-	AccountID     int64          `json:"accountId"`
-	CharacterID   int64          `json:"characterId"`
-	PosX          float64        `json:"posX"`
-	PosY          float64        `json:"posY"`
-	CurrentMap    string         `json:"currentMap"`
-	PlayTimeSec   int64          `json:"playTimeSec"`
-	Hunger        float64        `json:"hunger"`
-	Level         int            `json:"level"`
-	Exp           int64          `json:"exp"`
-	Appearance    map[string]any `json:"appearanceJson"`
-	CharacterName string         `json:"characterName"`
-	LastPlayed    time.Time      `json:"lastPlayed"`
-	HasLastPlayed bool           `json:"hasLastPlayed"`
+	AccountID      int64          `json:"accountId"`
+	CharacterID    int64          `json:"characterId"`
+	PosX           float64        `json:"posX"`
+	PosY           float64        `json:"posY"`
+	CurrentMap     string         `json:"currentMap"`
+	PlayTimeSec    int64          `json:"playTimeSec"`
+	Hunger         float64        `json:"hunger"`
+	Level          int            `json:"level"`
+	Exp            int64          `json:"exp"`
+	ExpToNextLevel int64          `json:"expToNextLevel"`
+	Appearance     map[string]any `json:"appearanceJson"`
+	CharacterName  string         `json:"characterName"`
+	LastPlayed     time.Time      `json:"lastPlayed"`
+	HasLastPlayed  bool           `json:"hasLastPlayed"`
 }
 
 type PlayerSaveRequest struct {
@@ -306,21 +372,24 @@ type AccountToken struct {
 }
 
 type EconomySnapshot struct {
-	AccountID      int64           `json:"accountId"`
-	CharacterID    int64           `json:"characterId"`
-	Gold           int64           `json:"gold"`
-	Gems           int64           `json:"gems"`
-	Stamina        int             `json:"stamina"`
-	BagSlots       int             `json:"bagSlots"`
-	BagExpandCount int             `json:"bagExpandCount"`
-	HasLicense     bool            `json:"hasLicense"`
-	Level          int             `json:"level"`
-	Exp            int64           `json:"exp"`
-	AccountToken   AccountToken    `json:"accountToken"`
-	Inventory      []InventoryItem `json:"inventory"`
-	Warehouse      []InventoryItem `json:"warehouse"`
-	LootTray       []InventoryItem `json:"lootTray"`
-	Equipment      []EquipmentItem `json:"equipmentItems"`
+	AccountID               int64           `json:"accountId"`
+	CharacterID             int64           `json:"characterId"`
+	Gold                    int64           `json:"gold"`
+	Gems                    int64           `json:"gems"`
+	Stamina                 int             `json:"stamina"`
+	BagSlots                int             `json:"bagSlots"`
+	BagExpandCount          int             `json:"bagExpandCount"`
+	HasLicense              bool            `json:"hasLicense"`
+	Level                   int             `json:"level"`
+	Exp                     int64           `json:"exp"`
+	ExpToNextLevel          int64           `json:"expToNextLevel"`
+	HighestClearedChapterID int             `json:"highestClearedChapterId"`
+	HighestClearedFloorID   int             `json:"highestClearedFloorId"`
+	AccountToken            AccountToken    `json:"accountToken"`
+	Inventory               []InventoryItem `json:"inventory"`
+	Warehouse               []InventoryItem `json:"warehouse"`
+	LootTray                []InventoryItem `json:"lootTray"`
+	Equipment               []EquipmentItem `json:"equipmentItems"`
 }
 
 type ShopBuyRequest struct {
@@ -574,33 +643,35 @@ type Store struct {
 	serviceNonces         map[string]time.Time
 	dungeonRecoveries     map[int64]*DungeonRunRecovery
 	mysteryShops          map[string]*MysteryShopBoardState
+	gatheringSettlements  map[string]time.Time
 }
 
 var Default = New()
 
 func New() *Store {
 	return &Store{
-		nextID:            1000,
-		nonces:            map[string]*WalletLoginNonce{},
-		accounts:          map[int64]*Account{},
-		byWallet:          map[string]int64{},
-		characters:        map[int64]*Character{},
-		characterStates:   map[int64]*characterStateRecord{},
-		tickets:           map[string]*GameTicket{},
-		tokens:            map[int64]*AccountToken{},
-		locked:            map[int64]*LockedGame{},
-		withdrawals:       map[int64]*Withdrawal{},
-		sessions:          map[string]*AccountSession{},
-		refresh:           map[string]*RefreshTokenRecord{},
-		servers:           map[string]*GameServer{},
-		online:            map[int64]*OnlineSession{},
-		adminUsers:        map[string]*AdminUser{},
-		adminLoginNonces:  map[string]*AdminLoginNonce{},
-		adminOperations:   map[string]*AdminOperation{},
-		serviceIdentities: map[string]*ServiceIdentity{},
-		serviceNonces:     map[string]time.Time{},
-		dungeonRecoveries: map[int64]*DungeonRunRecovery{},
-		mysteryShops:      map[string]*MysteryShopBoardState{},
+		nextID:               1000,
+		nonces:               map[string]*WalletLoginNonce{},
+		accounts:             map[int64]*Account{},
+		byWallet:             map[string]int64{},
+		characters:           map[int64]*Character{},
+		characterStates:      map[int64]*characterStateRecord{},
+		tickets:              map[string]*GameTicket{},
+		tokens:               map[int64]*AccountToken{},
+		locked:               map[int64]*LockedGame{},
+		withdrawals:          map[int64]*Withdrawal{},
+		sessions:             map[string]*AccountSession{},
+		refresh:              map[string]*RefreshTokenRecord{},
+		servers:              map[string]*GameServer{},
+		online:               map[int64]*OnlineSession{},
+		adminUsers:           map[string]*AdminUser{},
+		adminLoginNonces:     map[string]*AdminLoginNonce{},
+		adminOperations:      map[string]*AdminOperation{},
+		serviceIdentities:    map[string]*ServiceIdentity{},
+		serviceNonces:        map[string]time.Time{},
+		dungeonRecoveries:    map[int64]*DungeonRunRecovery{},
+		mysteryShops:         map[string]*MysteryShopBoardState{},
+		gatheringSettlements: map[string]time.Time{},
 	}
 }
 
@@ -1335,7 +1406,7 @@ func (s *Store) PlayerProfile(accountID, characterID int64) (PlayerState, error)
 	return PlayerState{
 		AccountID: accountID, CharacterID: characterID, PosX: state.PosX, PosY: state.PosY,
 		CurrentMap: state.CurrentMap, PlayTimeSec: state.PlayTimeSec, Hunger: state.Hunger,
-		Level: row.Level, Appearance: row.Appearance, CharacterName: row.Name,
+		Level: row.Level, Exp: row.Exp, Appearance: row.Appearance, CharacterName: row.Name,
 		LastPlayed: state.LastPlayed, HasLastPlayed: state.HasLastPlayed,
 	}, nil
 }
@@ -1387,15 +1458,18 @@ func (s *Store) EconomySnapshot(accountID, characterID int64) (EconomySnapshot, 
 	}
 	token := *s.ensureTokenLocked(accountID)
 	return EconomySnapshot{
-		AccountID:    accountID,
-		CharacterID:  characterID,
-		BagSlots:     25,
-		Level:        1,
-		AccountToken: token,
-		Inventory:    []InventoryItem{},
-		Warehouse:    []InventoryItem{},
-		LootTray:     []InventoryItem{},
-		Equipment:    []EquipmentItem{},
+		AccountID:               accountID,
+		CharacterID:             characterID,
+		BagSlots:                25,
+		Level:                   character.Level,
+		Exp:                     character.Exp,
+		HighestClearedChapterID: character.HighestClearedChapterID,
+		HighestClearedFloorID:   character.HighestClearedFloorID,
+		AccountToken:            token,
+		Inventory:               []InventoryItem{},
+		Warehouse:               []InventoryItem{},
+		LootTray:                []InventoryItem{},
+		Equipment:               []EquipmentItem{},
 	}, nil
 }
 
@@ -1562,10 +1636,6 @@ func (s *Store) CancelDungeonRun(accountID, characterID int64, dungeonRunID, rea
 }
 
 func (s *Store) DungeonFinish(req DungeonFinishRequest) (DungeonResult, error) {
-	snapshot, err := s.EconomySnapshot(req.AccountID, req.CharacterID)
-	if err != nil {
-		return DungeonResult{}, err
-	}
 	result := strings.ToLower(strings.TrimSpace(req.Result))
 	status := "FAILED"
 	if result == "victory" {
@@ -1581,13 +1651,35 @@ func (s *Store) DungeonFinish(req DungeonFinishRequest) (DungeonResult, error) {
 		s.mu.Unlock()
 		return DungeonResult{}, ErrForbidden
 	}
+	character := s.characters[req.CharacterID]
+	if character == nil || character.AccountID != req.AccountID || character.Deleted {
+		s.mu.Unlock()
+		return DungeonResult{}, ErrNotFound
+	}
+	currentLevel := character.Level
+	if req.Exp > 0 {
+		character.Exp += req.Exp
+	}
+	levelProgress := req.LevelProgression.Progress(currentLevel, character.Exp)
+	if levelProgress.Level != character.Level {
+		character.Level = levelProgress.Level
+	}
 	recovery.Required = false
 	if result == "victory" {
 		recovery.Status = "FINISHED"
+		if character.HighestClearedChapterID < req.ChapterID ||
+			(character.HighestClearedChapterID == req.ChapterID && character.HighestClearedFloorID < req.FloorID) {
+			character.HighestClearedChapterID = req.ChapterID
+			character.HighestClearedFloorID = req.FloorID
+		}
 	} else {
 		recovery.Status = "FAILED"
 	}
 	s.mu.Unlock()
+	snapshot, err := s.EconomySnapshot(req.AccountID, req.CharacterID)
+	if err != nil {
+		return DungeonResult{}, err
+	}
 	rewardItems := []InventoryItem{}
 	rewardEquipment := []EquipmentItem{}
 	for index, reward := range req.RewardPlan.Items {
@@ -1621,6 +1713,7 @@ func (s *Store) DungeonFinish(req DungeonFinishRequest) (DungeonResult, error) {
 		Cost:         DungeonCost{Items: []InventoryItem{}},
 		Rewards: DungeonRewards{
 			Exp:            req.Exp,
+			LevelsGained:   levelProgress.LevelsGained,
 			Level:          snapshot.Level,
 			TokenReward:    strconv.FormatInt(req.RewardPlan.TokenReward, 10),
 			Items:          rewardItems,
@@ -1868,6 +1961,18 @@ func (s *Store) activitySettlement(req ActivitySettlementRequest) (ActivitySettl
 	if err != nil {
 		return ActivitySettlementResult{}, err
 	}
+	if strings.TrimSpace(req.ActivityType) == "gathering" && req.RespawnSeconds > 0 {
+		key := gatheringSettlementKey(req.CharacterID, req.ActivityID)
+		now := time.Now().UTC()
+		s.mu.Lock()
+		last, ok := s.gatheringSettlements[key]
+		if ok && now.Before(last.Add(time.Duration(req.RespawnSeconds)*time.Second)) {
+			s.mu.Unlock()
+			return ActivitySettlementResult{}, fmt.Errorf("gathering node %q is on cooldown", strings.TrimSpace(req.ActivityID))
+		}
+		s.gatheringSettlements[key] = now
+		s.mu.Unlock()
+	}
 	return ActivitySettlementResult{
 		ActivityID:   strings.TrimSpace(req.ActivityID),
 		ActivityType: strings.TrimSpace(req.ActivityType),
@@ -1878,6 +1983,10 @@ func (s *Store) activitySettlement(req ActivitySettlementRequest) (ActivitySettl
 		},
 		Snapshot: snapshot,
 	}, nil
+}
+
+func gatheringSettlementKey(characterID int64, nodeID string) string {
+	return fmt.Sprintf("%d:%s", characterID, strings.TrimSpace(nodeID))
 }
 
 func (s *Store) SaveTicket(ticket GameTicket) {

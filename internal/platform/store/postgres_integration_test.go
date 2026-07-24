@@ -633,6 +633,93 @@ func TestPostgresIdempotencyKeyCannotCrossAccount(t *testing.T) {
 	}
 }
 
+func TestPostgresDungeonEnterConsumesCostItems(t *testing.T) {
+	databaseURL := os.Getenv("DATABASE_URL")
+	if databaseURL == "" {
+		t.Skip("DATABASE_URL is not set")
+	}
+	ctx := context.Background()
+	pg, err := NewPostgres(ctx, databaseURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pg.Close()
+	suffix := fmt.Sprintf("%d", time.Now().UnixNano())
+	wallet := "dungeon_cost_wallet_" + suffix
+	ticketID := "dungeon_ticket_" + suffix
+	defer func() {
+		_, _ = pg.pool.Exec(ctx, `DELETE FROM accounts WHERE solana_wallet_address = $1`, wallet)
+		_, _ = pg.pool.Exec(ctx, `DELETE FROM item_catalog WHERE item_id = $1`, ticketID)
+	}()
+	account := pg.UpsertAccountByWallet(wallet)
+	character, err := pg.CreateCharacter(account.ID, "Dungeon Cost Hero")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pg.pool.Exec(ctx, `
+		INSERT INTO item_catalog (item_id, name, category, stackable)
+		VALUES ($1, $1, 'material', TRUE)
+	`, ticketID); err != nil {
+		t.Fatalf("insert ticket catalog: %v", err)
+	}
+	if _, err := pg.pool.Exec(ctx, `UPDATE character_wallets SET gold = 200 WHERE character_id = $1`, character.ID); err != nil {
+		t.Fatalf("seed gold: %v", err)
+	}
+	cost := DungeonCost{Gold: 54, Items: []InventoryItem{{ItemID: ticketID, Quantity: 1}}}
+	req := DungeonEnterRequest{
+		OpID:        "dungeon-enter-cost-" + suffix,
+		AccountID:   account.ID,
+		CharacterID: character.ID,
+		ChapterID:   0,
+		FloorID:     10,
+		IsBoss:      true,
+		Cost:        cost,
+	}
+
+	if _, err := pg.DungeonEnter(req); !errors.Is(err, ErrInsufficientBalance) {
+		t.Fatalf("missing ticket err=%v want ErrInsufficientBalance", err)
+	}
+	snapshot, err := pg.EconomySnapshot(account.ID, character.ID)
+	if err != nil {
+		t.Fatalf("snapshot after failed enter: %v", err)
+	}
+	if snapshot.Gold != 200 {
+		t.Fatalf("failed enter gold=%d want 200", snapshot.Gold)
+	}
+
+	if _, err := pg.pool.Exec(ctx, `
+		INSERT INTO inventory_items (character_id, item_id, quantity, location, slot)
+		VALUES ($1, $2, 2, 'BAG', 0)
+	`, character.ID, ticketID); err != nil {
+		t.Fatalf("insert ticket inventory: %v", err)
+	}
+	entered, err := pg.DungeonEnter(req)
+	if err != nil {
+		t.Fatalf("dungeon enter with ticket: %v", err)
+	}
+	if entered.Cost.Gold != cost.Gold || len(entered.Cost.Items) != 1 || entered.Cost.Items[0].ItemID != ticketID {
+		t.Fatalf("entered cost=%+v", entered.Cost)
+	}
+	if entered.Snapshot.Gold != 146 || inventoryQuantity(entered.Snapshot.Inventory, ticketID) != 1 {
+		t.Fatalf("snapshot after enter gold=%d inventory=%+v", entered.Snapshot.Gold, entered.Snapshot.Inventory)
+	}
+
+	replay, err := pg.DungeonEnter(req)
+	if err != nil {
+		t.Fatalf("dungeon enter replay: %v", err)
+	}
+	if replay.DungeonRunID != entered.DungeonRunID {
+		t.Fatalf("replay dungeonRunId=%s want %s", replay.DungeonRunID, entered.DungeonRunID)
+	}
+	afterReplay, err := pg.EconomySnapshot(account.ID, character.ID)
+	if err != nil {
+		t.Fatalf("snapshot after replay: %v", err)
+	}
+	if afterReplay.Gold != 146 || inventoryQuantity(afterReplay.Inventory, ticketID) != 1 {
+		t.Fatalf("replay consumed cost again: gold=%d inventory=%+v", afterReplay.Gold, afterReplay.Inventory)
+	}
+}
+
 func TestPostgresDungeonRunIsBoundToOriginServer(t *testing.T) {
 	databaseURL := os.Getenv("DATABASE_URL")
 	if databaseURL == "" {
@@ -796,6 +883,9 @@ func TestPostgresLootClaimAndActivitySettlements(t *testing.T) {
 	if inventoryQuantity(snapshot.Inventory, materialID) != 3 {
 		t.Fatalf("inventory after claim all = %+v", snapshot.Inventory)
 	}
+	if inventoryStackCount(snapshot.Inventory, materialID) != 1 {
+		t.Fatalf("claimed loot should stack into one bag row: %+v", snapshot.Inventory)
+	}
 	if equipmentStatus(snapshot.Equipment, equipmentUID) != "IN_BAG" {
 		t.Fatalf("equipment after claim all = %+v", snapshot.Equipment)
 	}
@@ -833,11 +923,12 @@ func TestPostgresLootClaimAndActivitySettlements(t *testing.T) {
 	}
 
 	gatherResult, err := pg.GatheringSettle(ActivitySettlementRequest{
-		OpID:        "gather_" + suffix,
-		AccountID:   account.ID,
-		CharacterID: character.ID,
-		ActivityID:  "node_" + suffix,
-		RewardPlan:  directRewardPlan(materialID, equipmentItemID, "gather_equipment_"+suffix),
+		OpID:           "gather_" + suffix,
+		AccountID:      account.ID,
+		CharacterID:    character.ID,
+		ActivityID:     "node_" + suffix,
+		RespawnSeconds: 5,
+		RewardPlan:     directRewardPlan(materialID, equipmentItemID, "gather_equipment_"+suffix),
 	})
 	if err != nil {
 		t.Fatalf("gathering settle: %v", err)
@@ -845,11 +936,37 @@ func TestPostgresLootClaimAndActivitySettlements(t *testing.T) {
 	if inventoryQuantity(gatherResult.Snapshot.Inventory, materialID) < 4 {
 		t.Fatalf("gathering should add material directly to bag: %+v", gatherResult.Snapshot.Inventory)
 	}
+	if inventoryStackCount(gatherResult.Snapshot.Inventory, materialID) != 1 {
+		t.Fatalf("gathering material should stack into existing bag row: %+v", gatherResult.Snapshot.Inventory)
+	}
 	if equipmentStatus(gatherResult.Snapshot.Equipment, "gather_equipment_"+suffix) != "IN_BAG" {
 		t.Fatalf("gathering equipment should enter bag: %+v", gatherResult.Snapshot.Equipment)
 	}
 	if len(gatherResult.Snapshot.LootTray) != 0 {
 		t.Fatalf("gathering should not create loot tray rows: %+v", gatherResult.Snapshot.LootTray)
+	}
+
+	_, err = pg.GatheringSettle(ActivitySettlementRequest{
+		OpID:           "gather_cooldown_" + suffix,
+		AccountID:      account.ID,
+		CharacterID:    character.ID,
+		ActivityID:     "node_" + suffix,
+		RespawnSeconds: 5,
+		RewardPlan:     directRewardPlan(materialID, equipmentItemID, "gather_cooldown_equipment_"+suffix),
+	})
+	if err == nil || !strings.Contains(err.Error(), "cooldown") {
+		t.Fatalf("same gathering node should be on cooldown, got err=%v", err)
+	}
+	_, err = pg.GatheringSettle(ActivitySettlementRequest{
+		OpID:           "gather_other_node_" + suffix,
+		AccountID:      account.ID,
+		CharacterID:    character.ID,
+		ActivityID:     "other_node_" + suffix,
+		RespawnSeconds: 5,
+		RewardPlan:     directRewardPlan(materialID, equipmentItemID, "gather_other_equipment_"+suffix),
+	})
+	if err != nil {
+		t.Fatalf("different gathering node should not share cooldown: %v", err)
 	}
 
 	farmResult, err := pg.FarmingHarvest(ActivitySettlementRequest{
@@ -893,6 +1010,16 @@ func inventoryQuantity(rows []InventoryItem, itemID string) int64 {
 	for _, row := range rows {
 		if row.ItemID == itemID {
 			total += row.Quantity
+		}
+	}
+	return total
+}
+
+func inventoryStackCount(rows []InventoryItem, itemID string) int {
+	var total int
+	for _, row := range rows {
+		if row.ItemID == itemID {
+			total++
 		}
 	}
 	return total
@@ -1062,6 +1189,8 @@ func TestPostgresInventoryOrganizeDiscardAndSynthesize(t *testing.T) {
 	materialID := "inv_material_" + suffix
 	sporeID := "inv_spore_" + suffix
 	weaponID := "inv_weapon_" + suffix
+	equipmentUIDA := "inv_equipment_a_" + suffix
+	equipmentUIDB := "inv_equipment_b_" + suffix
 
 	defer func() {
 		_, _ = pg.pool.Exec(ctx, `DELETE FROM accounts WHERE solana_wallet_address = $1`, wallet)
@@ -1111,6 +1240,36 @@ func TestPostgresInventoryOrganizeDiscardAndSynthesize(t *testing.T) {
 	}
 	if organized.Inventory[0].Slot != 0 {
 		t.Fatalf("expected merged stack at slot 0, got %+v", organized.Inventory)
+	}
+
+	if _, err := pg.pool.Exec(ctx, `
+		INSERT INTO equipment_items (equipment_uid, account_id, character_id, item_id, location, slot)
+		VALUES
+			($1, $3, $4, $5, 'IN_BAG', 2),
+			($2, $3, $4, $5, 'IN_BAG', 1)
+	`, equipmentUIDA, equipmentUIDB, account.ID, character.ID, weaponID); err != nil {
+		t.Fatalf("insert bag equipment: %v", err)
+	}
+	organizedWithEquipment, err := pg.InventoryOrganize(EconomyActionRequest{
+		OpID:        "organize_equipment_" + suffix,
+		AccountID:   account.ID,
+		CharacterID: character.ID,
+	}, 25)
+	if err != nil {
+		t.Fatalf("organize with equipment: %v", err)
+	}
+	equipmentSlots := map[string]int{}
+	for _, row := range organizedWithEquipment.Equipment {
+		equipmentSlots[row.EquipmentUID] = row.Slot
+	}
+	if equipmentSlots[equipmentUIDA] != 1 || equipmentSlots[equipmentUIDB] != 2 {
+		t.Fatalf("equipment slots after organize = %+v", organizedWithEquipment.Equipment)
+	}
+	if _, err := pg.pool.Exec(ctx, `
+		DELETE FROM equipment_items
+		WHERE equipment_uid IN ($1, $2)
+	`, equipmentUIDA, equipmentUIDB); err != nil {
+		t.Fatalf("delete bag equipment: %v", err)
 	}
 
 	if _, err := pg.pool.Exec(ctx, `

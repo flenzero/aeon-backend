@@ -282,12 +282,30 @@ func (s *PostgresStore) organizeStorage(ctx context.Context, tx pgx.Tx, accountI
 	if err != nil {
 		return err
 	}
-	defer equipmentRows.Close()
+	equipmentIDs := []int64{}
 	for equipmentRows.Next() {
 		var equipmentID int64
 		if err := equipmentRows.Scan(&equipmentID); err != nil {
+			equipmentRows.Close()
 			return err
 		}
+		equipmentIDs = append(equipmentIDs, equipmentID)
+	}
+	equipmentRows.Close()
+	if err := equipmentRows.Err(); err != nil {
+		return err
+	}
+
+	for _, equipmentID := range equipmentIDs {
+		if _, err := tx.Exec(ctx, `
+			UPDATE equipment_items
+			SET slot = NULL, updated_at = NOW()
+			WHERE id = $1
+		`, equipmentID); err != nil {
+			return err
+		}
+	}
+	for _, equipmentID := range equipmentIDs {
 		if _, err := tx.Exec(ctx, `
 			UPDATE equipment_items
 			SET slot = $2, updated_at = NOW()
@@ -296,9 +314,6 @@ func (s *PostgresStore) organizeStorage(ctx context.Context, tx pgx.Tx, accountI
 			return err
 		}
 		slot++
-	}
-	if err := equipmentRows.Err(); err != nil {
-		return err
 	}
 
 	ledgerKind := "INVENTORY_ORGANIZED"

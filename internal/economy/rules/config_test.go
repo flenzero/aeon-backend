@@ -64,6 +64,26 @@ func TestLoadDirAndDungeonRewards(t *testing.T) {
 	}
 }
 
+func TestExpToNextLevelUsesConfiguredCurve(t *testing.T) {
+	cfg, err := LoadDir(filepath.Join("..", "..", "..", "configs", "economy"))
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if got := cfg.ExpToNextLevel(1, 0); got != 83 {
+		t.Fatalf("level 1 expToNextLevel=%d, want 83", got)
+	}
+	if got := cfg.ExpToNextLevel(1, 20); got != 63 {
+		t.Fatalf("level 1 exp=20 expToNextLevel=%d, want 63", got)
+	}
+	progress := cfg.LevelProgress(1, 90)
+	if progress.Level != 2 || progress.LevelsGained != 1 || progress.ExpToNextLevel != 125 {
+		t.Fatalf("level progress for exp=90 is %+v, want level=2 levelsGained=1 expToNextLevel=125", progress)
+	}
+	if got := cfg.ExpToNextLevel(60, 0); got != -1 {
+		t.Fatalf("max level expToNextLevel=%d, want -1", got)
+	}
+}
+
 func TestLoadDirBuildsLiveEquipmentAndOperationsConfiguration(t *testing.T) {
 	cfg, err := LoadDir(filepath.Join("..", "..", "..", "configs", "economy"))
 	if err != nil {
@@ -102,6 +122,23 @@ func TestLoadDirBuildsLiveEquipmentAndOperationsConfiguration(t *testing.T) {
 	}
 	if axe.EquipSlot != 0 || axe.WeaponType != WeaponTypeAxe || axe.WeaponTypeKey != "axe" {
 		t.Fatalf("axe slot/weapon type=%+v", axe)
+	}
+	gold, ok := cfg.EquipmentSellPriceGold("ashbound_axe_t1", 6)
+	if !ok || gold != 300 {
+		t.Fatalf("ashbound axe rarity 6 sell price = %d ok=%v, want 300", gold, ok)
+	}
+	gold, ok = cfg.EquipmentSellPriceGold("gloomhide_sword_t5", 2)
+	if !ok || gold != 180 {
+		t.Fatalf("gloomhide sword rarity 2 sell price = %d ok=%v, want 180", gold, ok)
+	}
+	if _, ok := cfg.Items["rusted_saber"]; ok {
+		t.Fatal("legacy rusted_saber item should be removed")
+	}
+	if _, ok := cfg.Items["nightglass_staff"]; ok {
+		t.Fatal("legacy nightglass_staff item should be removed")
+	}
+	if _, ok := cfg.Recipes["forge_rusted_saber"]; ok {
+		t.Fatal("legacy forge_rusted_saber recipe should be removed")
 	}
 	slotCases := map[string]int{
 		"ashbound_sword_t1":     0,
@@ -222,13 +259,6 @@ func TestNewEquipmentUsesSemanticAffixesAndLiveResolution(t *testing.T) {
 	if mount.WeaponType != WeaponTypeNone || mount.WeaponTypeKey != "none" {
 		t.Fatalf("mount weapon type = %+v", mount)
 	}
-	legacy, err := cfg.ResolveEquipmentItem(store.EquipmentItem{ItemID: "rusted_saber", Rarity: 1})
-	if err != nil {
-		t.Fatalf("resolve legacy weapon: %v", err)
-	}
-	if legacy.WeaponType != WeaponTypeSword || legacy.WeaponTypeKey != "sword" {
-		t.Fatalf("legacy weapon type = %+v", legacy)
-	}
 }
 
 func TestBountyTaskPlansRespectRefreshMode(t *testing.T) {
@@ -313,6 +343,9 @@ func TestGatheringNodesAwardFourQualityMaterialsAndRareVoucher(t *testing.T) {
 		if !ok {
 			t.Fatalf("gathering node %q is missing", tc.nodeID)
 		}
+		if node.RespawnSeconds < 5 || node.RespawnSeconds > 10 {
+			t.Fatalf("gathering node %q respawnSeconds = %d, want 5..10", tc.nodeID, node.RespawnSeconds)
+		}
 		pool, ok := cfg.LootPools[node.LootPoolID]
 		if !ok {
 			t.Fatalf("gathering node %q references missing pool %q", tc.nodeID, node.LootPoolID)
@@ -332,6 +365,81 @@ func TestGatheringNodesAwardFourQualityMaterialsAndRareVoucher(t *testing.T) {
 		if chances["aeb_exchange_voucher"] != 0.0002 {
 			t.Fatalf("gathering node %q voucher chance = %v, want 0.0002", tc.nodeID, chances["aeb_exchange_voucher"])
 		}
+	}
+}
+
+func TestFishingNodeHasNonGuaranteedFishAndLevelScaledGear(t *testing.T) {
+	cfg, err := LoadDir(filepath.Join("..", "..", "..", "configs", "economy"))
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	node, ok := cfg.GatherNodes["shadow_woods_blackwater_fishing_spot"]
+	if !ok {
+		t.Fatal("fishing node is missing")
+	}
+	if node.NodeType != "fishing" {
+		t.Fatalf("fishing node type = %q, want fishing", node.NodeType)
+	}
+	if node.RespawnSeconds != 5 {
+		t.Fatalf("fishing respawnSeconds = %d, want 5", node.RespawnSeconds)
+	}
+	pool, ok := cfg.LootPools[node.LootPoolID]
+	if !ok {
+		t.Fatalf("fishing node references missing pool %q", node.LootPoolID)
+	}
+	chances := map[string]float64{}
+	equipmentRarities := map[int]bool{}
+	for _, entry := range pool.Entries {
+		if entry.RewardType == "item" {
+			chances[entry.ItemID] = entry.DropChance
+		}
+		if entry.RewardType == "equipment" {
+			if entry.EquipmentStageMode != "character_level_floor" {
+				t.Fatalf("fishing gear entry must be level scaled: %+v", entry)
+			}
+			equipmentRarities[entry.Rarity] = true
+		}
+	}
+	if chances["gloomfin_sweet"] != 0.7 || chances["gloomfin_fresh"] != 0.18 || chances["gloomfin_silver"] != 0.04 || chances["gloomfin_moonspotted"] != 0.004 {
+		t.Fatalf("fishing fish chances = %+v", chances)
+	}
+	if chances["gloomfin_sweet"] >= 1 {
+		t.Fatalf("basic fish should not be guaranteed: %+v", chances)
+	}
+	if chances["aeb_exchange_voucher"] != 0.0001 {
+		t.Fatalf("fishing voucher chance = %v, want 0.0001", chances["aeb_exchange_voucher"])
+	}
+	if !equipmentRarities[1] || !equipmentRarities[2] || len(equipmentRarities) != 2 {
+		t.Fatalf("fishing should only configure damaged/crude gear: %+v", equipmentRarities)
+	}
+	if cfg.equipmentStageForCharacterLevel(7) != 5 || cfg.equipmentStageForCharacterLevel(11) != 10 {
+		t.Fatalf("level-scaled stages: level7=%d level11=%d", cfg.equipmentStageForCharacterLevel(7), cfg.equipmentStageForCharacterLevel(11))
+	}
+	cfg.LootPools["test_level_scaled_fishing"] = LootPool{
+		LootPoolID: "test_level_scaled_fishing",
+		Entries: []LootEntry{{
+			RewardType:         "equipment",
+			QuantityMin:        1,
+			QuantityMax:        1,
+			DropChance:         1,
+			Rarity:             2,
+			EquipmentStageMode: "character_level_floor",
+			EquipmentSeries:    []string{"sword"},
+		}},
+	}
+	level7, err := cfg.lootPoolRewards("test_level_scaled_fishing", "fish-gear-7", "fish-node", 100, 7, 0, 0)
+	if err != nil {
+		t.Fatalf("level 7 fishing rewards: %v", err)
+	}
+	if len(level7.Items) != 1 || level7.Items[0].ItemID != "gloomhide_sword_t5" || level7.Items[0].Rarity != 2 {
+		t.Fatalf("level 7 gear = %+v, want crude T5 sword", level7.Items)
+	}
+	level11, err := cfg.lootPoolRewards("test_level_scaled_fishing", "fish-gear-11", "fish-node", 100, 11, 0, 0)
+	if err != nil {
+		t.Fatalf("level 11 fishing rewards: %v", err)
+	}
+	if len(level11.Items) != 1 || level11.Items[0].ItemID != "shadowiron_sword_t10" || level11.Items[0].Rarity != 2 {
+		t.Fatalf("level 11 gear = %+v, want crude T10 sword", level11.Items)
 	}
 }
 

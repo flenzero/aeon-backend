@@ -153,6 +153,7 @@ type MysteryDiscount struct {
 type EquipmentConfig struct {
 	StageMultipliers      map[int]float64              `json:"stageMultipliers"`
 	Rarities              map[int]EquipmentRarity      `json:"rarities"`
+	SellPriceGoldByStage  map[int]map[int]int64        `json:"sellPriceGoldByStage"`
 	NPCRecycleGoldByStage map[int]map[int]int64        `json:"npcRecycleGoldByStage"`
 	Enhancement           EnhancementConfig            `json:"enhancement"`
 	Series                []EquipmentSeries            `json:"series"`
@@ -191,6 +192,7 @@ type EquipmentStageTemplate struct {
 	ItemID         string             `json:"itemId"`
 	Prefix         string             `json:"prefix"`
 	BasePercent    map[string]float64 `json:"basePercent"`
+	SellPriceGold  map[int]int64      `json:"sellPriceGold"`
 	NPCRecycleGold map[int]int64      `json:"npcRecycleGold"`
 }
 
@@ -206,6 +208,7 @@ type EquipmentTemplate struct {
 	AffixPoolID    string             `json:"affixPoolId"`
 	BaseFlat       map[string]float64 `json:"baseFlat"`
 	BasePercent    map[string]float64 `json:"basePercent"`
+	SellPriceGold  map[int]int64      `json:"sellPriceGold"`
 	NPCRecycleGold map[int]int64      `json:"npcRecycleGold"`
 }
 
@@ -361,13 +364,15 @@ type LootPool struct {
 }
 
 type LootEntry struct {
-	RewardType  string  `json:"rewardType"`
-	ItemID      string  `json:"itemId"`
-	QuantityMin int64   `json:"quantityMin"`
-	QuantityMax int64   `json:"quantityMax"`
-	DropChance  float64 `json:"dropChance"`
-	Rarity      int     `json:"rarity"`
-	AffixPoolID string  `json:"affixPoolId"`
+	RewardType         string   `json:"rewardType"`
+	ItemID             string   `json:"itemId"`
+	QuantityMin        int64    `json:"quantityMin"`
+	QuantityMax        int64    `json:"quantityMax"`
+	DropChance         float64  `json:"dropChance"`
+	Rarity             int      `json:"rarity"`
+	AffixPoolID        string   `json:"affixPoolId"`
+	EquipmentStageMode string   `json:"equipmentStageMode,omitempty"`
+	EquipmentSeries    []string `json:"equipmentSeries,omitempty"`
 }
 
 type AffixPool struct {
@@ -536,7 +541,7 @@ func (c *Config) DungeonRewards(req store.DungeonFinishRequest) (store.DungeonRe
 	if req.Result != "victory" || floor.LootPoolID == "" {
 		return plan, nil
 	}
-	rewards, err := c.lootPoolRewards(floor.LootPoolID, req.OpID, req.DungeonRunID, req.CharacterID, req.ChapterID, req.FloorID)
+	rewards, err := c.lootPoolRewards(floor.LootPoolID, req.OpID, req.DungeonRunID, req.CharacterID, 0, req.ChapterID, req.FloorID)
 	if err != nil {
 		return store.DungeonRewardPlan{}, err
 	}
@@ -550,7 +555,7 @@ func (c *Config) GatheringRewards(req store.ActivitySettlementRequest) (store.Du
 	if !ok {
 		return store.DungeonRewardPlan{}, fmt.Errorf("gathering node %q is not configured", req.ActivityID)
 	}
-	return c.lootPoolRewards(node.LootPoolID, req.OpID, req.ActivityID, req.CharacterID, 0, 0)
+	return c.lootPoolRewards(node.LootPoolID, req.OpID, req.ActivityID, req.CharacterID, req.CharacterLevel, 0, 0)
 }
 
 func (c *Config) FarmingRewards(req store.ActivitySettlementRequest) (store.DungeonRewardPlan, error) {
@@ -558,7 +563,7 @@ func (c *Config) FarmingRewards(req store.ActivitySettlementRequest) (store.Dung
 	if !ok {
 		return store.DungeonRewardPlan{}, fmt.Errorf("crop %q is not configured", req.ActivityID)
 	}
-	return c.lootPoolRewards(crop.HarvestLootPoolID, req.OpID, req.ActivityID, req.CharacterID, 0, 0)
+	return c.lootPoolRewards(crop.HarvestLootPoolID, req.OpID, req.ActivityID, req.CharacterID, 0, 0, 0)
 }
 
 func (c *Config) BossRewards(req store.BossSettleRequest, contribution int64) (store.DungeonRewardPlan, error) {
@@ -573,21 +578,21 @@ func (c *Config) BossRewards(req store.BossSettleRequest, contribution int64) (s
 	refID := fmt.Sprintf("boss-%d", req.BossEventID)
 	plan := store.DungeonRewardPlan{IsBoss: true}
 	if boss.ParticipationLootPoolID != "" {
-		participation, err := c.lootPoolRewards(boss.ParticipationLootPoolID, req.OpID+":participation", refID, req.CharacterID, 0, 0)
+		participation, err := c.lootPoolRewards(boss.ParticipationLootPoolID, req.OpID+":participation", refID, req.CharacterID, 0, 0, 0)
 		if err != nil {
 			return store.DungeonRewardPlan{}, err
 		}
 		mergeRewardPlan(&plan, participation)
 	}
 	if contribution > 0 && boss.LootPoolID != "" {
-		main, err := c.lootPoolRewards(boss.LootPoolID, req.OpID+":main", refID, req.CharacterID, int(contribution), 0)
+		main, err := c.lootPoolRewards(boss.LootPoolID, req.OpID+":main", refID, req.CharacterID, 0, int(contribution), 0)
 		if err != nil {
 			return store.DungeonRewardPlan{}, err
 		}
 		mergeRewardPlan(&plan, main)
 	}
 	if tierPool := bossTierPool(boss, contribution); tierPool != "" {
-		tier, err := c.lootPoolRewards(tierPool, req.OpID+":tier", refID, req.CharacterID, int(contribution), 1)
+		tier, err := c.lootPoolRewards(tierPool, req.OpID+":tier", refID, req.CharacterID, 0, int(contribution), 1)
 		if err != nil {
 			return store.DungeonRewardPlan{}, err
 		}
@@ -666,6 +671,23 @@ func (c *Config) EffectiveBagSlots(expandCount int) int {
 		expandCount = 0
 	}
 	return base + expandCount*slotsPer
+}
+
+func (c *Config) ExpToNextLevel(level int, exp int64) int64 {
+	return c.LevelProgressionRules().ExpToNextLevel(level, exp)
+}
+
+func (c *Config) LevelProgress(level int, exp int64) store.LevelProgress {
+	return c.LevelProgressionRules().Progress(level, exp)
+}
+
+func (c *Config) LevelProgressionRules() store.LevelProgressionRules {
+	return store.LevelProgressionRules{
+		MaxLevel:  c.Rules.MaxLevel,
+		Base:      c.Rules.LevelExp.Base,
+		Linear:    c.Rules.LevelExp.Linear,
+		Quadratic: c.Rules.LevelExp.Quadratic,
+	}
 }
 
 func (c *Config) BagExpandSlots() int {
@@ -770,7 +792,7 @@ func bossTierPool(boss BossDefinition, contribution int64) string {
 	return poolID
 }
 
-func (c *Config) lootPoolRewards(lootPoolID, opID, refID string, characterID int64, chapterID, floorID int) (store.DungeonRewardPlan, error) {
+func (c *Config) lootPoolRewards(lootPoolID, opID, refID string, characterID int64, characterLevel, chapterID, floorID int) (store.DungeonRewardPlan, error) {
 	pool, ok := c.LootPools[lootPoolID]
 	if !ok {
 		return store.DungeonRewardPlan{}, fmt.Errorf("loot pool %q is not configured", lootPoolID)
@@ -796,14 +818,22 @@ func (c *Config) lootPoolRewards(lootPoolID, opID, refID string, characterID int
 			})
 		case "equipment":
 			for i := int64(0); i < quantity; i++ {
+				itemID := entry.ItemID
+				if strings.TrimSpace(entry.EquipmentStageMode) != "" {
+					template, err := c.rollLevelScaledEquipmentTemplate(rng, entry, characterLevel)
+					if err != nil {
+						return store.DungeonRewardPlan{}, err
+					}
+					itemID = template.ItemID
+				}
 				plan.Items = append(plan.Items, store.DungeonRewardGrant{
 					RewardType:   "equipment",
-					ItemID:       entry.ItemID,
+					ItemID:       itemID,
 					Quantity:     1,
-					Rarity:       itemRarity(c.Items, entry.ItemID, entry.Rarity),
-					Category:     itemCategory(c.Items, entry.ItemID),
+					Rarity:       itemRarity(c.Items, itemID, entry.Rarity),
+					Category:     itemCategory(c.Items, itemID),
 					EquipmentUID: equipmentUID(c.Rules.EquipmentUIDPrefix, opID, refID, index, int(i)),
-					Affixes:      c.rollRewardAffixes(rng, entry.ItemID, entry.Rarity, entry.AffixPoolID),
+					Affixes:      c.rollRewardAffixes(rng, itemID, entry.Rarity, entry.AffixPoolID),
 				})
 			}
 		case "token":
@@ -813,6 +843,65 @@ func (c *Config) lootPoolRewards(lootPoolID, opID, refID string, characterID int
 		}
 	}
 	return plan, nil
+}
+
+func (c *Config) rollLevelScaledEquipmentTemplate(rng *rand.Rand, entry LootEntry, characterLevel int) (EquipmentTemplate, error) {
+	mode := strings.TrimSpace(entry.EquipmentStageMode)
+	if mode != "character_level_floor" {
+		return EquipmentTemplate{}, fmt.Errorf("unsupported equipmentStageMode %q", entry.EquipmentStageMode)
+	}
+	stage := c.equipmentStageForCharacterLevel(characterLevel)
+	candidates := c.equipmentTemplatesByStageAndSeries(stage, entry.EquipmentSeries)
+	if len(candidates) == 0 {
+		return EquipmentTemplate{}, fmt.Errorf("no level-scaled equipment candidates for stage %d", stage)
+	}
+	return candidates[rng.IntN(len(candidates))], nil
+}
+
+func (c *Config) equipmentStageForCharacterLevel(characterLevel int) int {
+	stages := make([]int, 0, len(c.Equipment.StageMultipliers))
+	for stage := range c.Equipment.StageMultipliers {
+		stages = append(stages, stage)
+	}
+	sort.Ints(stages)
+	if len(stages) == 0 {
+		return 1
+	}
+	selected := stages[0]
+	if characterLevel <= 0 {
+		return selected
+	}
+	for _, stage := range stages {
+		if characterLevel < stage {
+			break
+		}
+		selected = stage
+	}
+	return selected
+}
+
+func (c *Config) equipmentTemplatesByStageAndSeries(stage int, seriesIDs []string) []EquipmentTemplate {
+	allowed := map[string]bool{}
+	for _, seriesID := range seriesIDs {
+		seriesID = strings.TrimSpace(seriesID)
+		if seriesID != "" {
+			allowed[seriesID] = true
+		}
+	}
+	candidates := make([]EquipmentTemplate, 0)
+	for _, template := range c.Equipment.ByItemID {
+		if template.Stage != stage {
+			continue
+		}
+		if len(allowed) > 0 && !allowed[template.SeriesID] {
+			continue
+		}
+		candidates = append(candidates, template)
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		return candidates[i].ItemID < candidates[j].ItemID
+	})
+	return candidates
 }
 
 func (c *Config) loadItems() error {
@@ -891,9 +980,22 @@ func (c *Config) loadEquipment() error {
 			if _, exists := c.Equipment.ByItemID[itemID]; exists {
 				return fmt.Errorf("equipment template itemId %q is duplicated", itemID)
 			}
+			sellPriceGold := stage.SellPriceGold
+			if len(sellPriceGold) == 0 {
+				sellPriceGold = c.Equipment.SellPriceGoldByStage[stage.Stage]
+			}
+			if len(sellPriceGold) == 0 {
+				sellPriceGold = stage.NPCRecycleGold
+			}
+			if len(sellPriceGold) == 0 {
+				sellPriceGold = c.Equipment.NPCRecycleGoldByStage[stage.Stage]
+			}
 			npcRecycleGold := stage.NPCRecycleGold
 			if len(npcRecycleGold) == 0 {
 				npcRecycleGold = c.Equipment.NPCRecycleGoldByStage[stage.Stage]
+			}
+			if len(npcRecycleGold) == 0 {
+				npcRecycleGold = sellPriceGold
 			}
 			template := EquipmentTemplate{
 				ItemID: itemID, SeriesID: series.SeriesID, Stage: stage.Stage,
@@ -901,7 +1003,8 @@ func (c *Config) loadEquipment() error {
 				WeaponType: weaponType, WeaponTypeKey: weaponTypeKey,
 				DisplayName: strings.TrimSpace(stage.Prefix) + strings.TrimSpace(series.DisplayType),
 				AffixPoolID: series.AffixPoolID, BaseFlat: series.BaseFlat,
-				BasePercent: stage.BasePercent, NPCRecycleGold: npcRecycleGold,
+				BasePercent: stage.BasePercent, SellPriceGold: sellPriceGold,
+				NPCRecycleGold: npcRecycleGold,
 			}
 			c.Equipment.ByItemID[itemID] = template
 			if _, exists := c.Items[itemID]; !exists {
@@ -937,6 +1040,15 @@ func (c *Config) EquipmentTemplate(itemID string) (EquipmentTemplate, bool) {
 func (c *Config) EquipmentRarity(rarity int) (EquipmentRarity, bool) {
 	row, ok := c.Equipment.Rarities[rarity]
 	return row, ok
+}
+
+func (c *Config) EquipmentSellPriceGold(itemID string, rarity int) (int64, bool) {
+	template, ok := c.EquipmentTemplate(itemID)
+	if !ok {
+		return 0, false
+	}
+	gold, ok := template.SellPriceGold[rarity]
+	return gold, ok && gold > 0
 }
 
 func (c *Config) Shop(shopID string) (Shop, bool) {
@@ -1495,6 +1607,14 @@ func (c *Config) validate() error {
 		if _, ok := c.AffixPools[template.AffixPoolID]; !ok {
 			return fmt.Errorf("equipment template %q references unknown affix pool %q", itemID, template.AffixPoolID)
 		}
+		if len(template.SellPriceGold) != 6 {
+			return fmt.Errorf("equipment template %q must define six sellPriceGold values", itemID)
+		}
+		for rarity, gold := range template.SellPriceGold {
+			if _, ok := c.Equipment.Rarities[rarity]; !ok || gold <= 0 {
+				return fmt.Errorf("equipment template %q has invalid sellPriceGold", itemID)
+			}
+		}
 		if len(template.NPCRecycleGold) != 6 {
 			return fmt.Errorf("equipment template %q must define six npcRecycleGold values", itemID)
 		}
@@ -1574,7 +1694,25 @@ func (c *Config) validate() error {
 	}
 	for poolID, pool := range c.LootPools {
 		for _, entry := range pool.Entries {
-			if entry.RewardType != "token" {
+			rewardType := strings.ToLower(strings.TrimSpace(entry.RewardType))
+			stageMode := strings.TrimSpace(entry.EquipmentStageMode)
+			if stageMode != "" {
+				if rewardType != "equipment" {
+					return fmt.Errorf("loot pool %q item %q uses equipmentStageMode with reward type %q", poolID, entry.ItemID, entry.RewardType)
+				}
+				if _, ok := c.Equipment.Rarities[entry.Rarity]; !ok {
+					return fmt.Errorf("loot pool %q level-scaled equipment has unknown rarity %d", poolID, entry.Rarity)
+				}
+				if stageMode != "character_level_floor" {
+					return fmt.Errorf("loot pool %q item %q has unsupported equipmentStageMode %q", poolID, entry.ItemID, entry.EquipmentStageMode)
+				}
+				for stage := range c.Equipment.StageMultipliers {
+					if len(c.equipmentTemplatesByStageAndSeries(stage, entry.EquipmentSeries)) == 0 {
+						return fmt.Errorf("loot pool %q has no level-scaled equipment candidates for stage %d", poolID, stage)
+					}
+				}
+			}
+			if rewardType != "token" && stageMode == "" {
 				if _, ok := c.Items[entry.ItemID]; !ok {
 					return fmt.Errorf("loot pool %q references unknown item %q", poolID, entry.ItemID)
 				}

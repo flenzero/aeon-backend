@@ -610,6 +610,9 @@ CREATE TABLE IF NOT EXISTS gathering_settlements (
 CREATE INDEX IF NOT EXISTS idx_gathering_settlements_character
   ON gathering_settlements(character_id, created_at DESC);
 
+CREATE INDEX IF NOT EXISTS idx_gathering_settlements_character_node
+  ON gathering_settlements(character_id, node_key, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS boss_events (
   id BIGSERIAL PRIMARY KEY,
   boss_key TEXT NOT NULL,

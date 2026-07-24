@@ -5,28 +5,35 @@
       "nodeType": "logging",
       "lootPoolId": "gather_shadow_woods_ashwood",
       "staminaCost": 1,
-      "respawnSeconds": 240
+      "respawnSeconds": 6
     },
     {
       "nodeId": "shadow_woods_iron_vein",
       "nodeType": "mining",
       "lootPoolId": "gather_shadow_woods_iron",
       "staminaCost": 1,
-      "respawnSeconds": 300
+      "respawnSeconds": 8
     },
     {
       "nodeId": "shadow_woods_gloomcap_patch",
       "nodeType": "foraging",
       "lootPoolId": "gather_shadow_woods_gloomcap",
       "staminaCost": 1,
-      "respawnSeconds": 180
+      "respawnSeconds": 5
     },
     {
       "nodeId": "shadow_woods_gloomstone_outcrop",
       "nodeType": "mining",
       "lootPoolId": "gather_shadow_woods_gloomstone",
       "staminaCost": 1,
-      "respawnSeconds": 420
+      "respawnSeconds": 10
+    },
+    {
+      "nodeId": "shadow_woods_blackwater_fishing_spot",
+      "nodeType": "fishing",
+      "lootPoolId": "gather_shadow_woods_blackwater_fishing",
+      "staminaCost": 1,
+      "respawnSeconds": 5
     }
   ]
 }

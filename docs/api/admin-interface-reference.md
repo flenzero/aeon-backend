@@ -271,7 +271,7 @@ Query：
 
 成功返回当前生效 Economy 配置生成的目录：`configVersion`、`items` 或 `groups`、`categories`、`count`、`total`、`limit`、`offset`。
 
-目录项包含 `itemId`、`displayName`、`category`、`categoryLabel`、`rarity`、`rarityLabel`、`isEquipment`、`equipmentSlot`、`equipmentSlotLabel`、`weaponType?`、`weaponTypeKey?`、`seriesId?`、`stage?`、`displayType?`、`stackable`、`maxGrantQuantity`、`enabledForAdminGrant`。装备模板会按当前配置的装备品质展开为多条 `itemId + rarity` 可选项；装备类 `maxGrantQuantity=1`，用于和发奖/补偿接口的装备数量校验保持一致。
+目录项包含 `itemId`、`displayName`、`category`、`categoryLabel`、`rarity`、`rarityLabel`、`isEquipment`、`equipmentSlot`、`equipmentSlotLabel`、`weaponType?`、`weaponTypeKey?`、`seriesId?`、`stage?`、`displayType?`、`stackable`、`sellPrice`、`maxGrantQuantity`、`enabledForAdminGrant`。装备模板会按当前配置的装备品质展开为多条 `itemId + rarity` 可选项，并按 `sellPriceGoldByStage` 带出卖出价；装备类 `maxGrantQuantity=1`，用于和发奖/补偿接口的装备数量校验保持一致。
 
 ## 6. Marketplace 限制
 

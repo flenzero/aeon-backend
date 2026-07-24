@@ -16,29 +16,6 @@
           "quantity": 1
         }
       ]
-    },
-    {
-      "recipeId": "forge_rusted_saber",
-      "displayName": "Forge Rusted Saber",
-      "inputs": [
-        {
-          "itemId": "shadow_iron",
-          "quantity": 5
-        },
-        {
-          "itemId": "aeon_shard",
-          "quantity": 2
-        }
-      ],
-      "outputs": [
-        {
-          "rewardType": "equipment",
-          "itemId": "rusted_saber",
-          "quantity": 1,
-          "rarity": 1,
-          "affixPoolId": "early_weapon_affixes"
-        }
-      ]
     }
   ]
 }

@@ -636,6 +636,15 @@ func (s *PostgresStore) DungeonEnter(req DungeonEnterRequest) (DungeonResult, er
 		if cost.Items == nil {
 			cost.Items = []InventoryItem{}
 		}
+		for index := range cost.Items {
+			cost.Items[index].ItemID = strings.TrimSpace(cost.Items[index].ItemID)
+			if cost.Items[index].ItemID == "" {
+				return DungeonResult{}, errors.New("dungeon cost itemId is required")
+			}
+			if cost.Items[index].Quantity <= 0 {
+				return DungeonResult{}, errors.New("dungeon cost item quantity must be positive")
+			}
+		}
 		costBytes, err := json.Marshal(cost)
 		if err != nil {
 			return DungeonResult{}, err
@@ -651,6 +660,11 @@ func (s *PostgresStore) DungeonEnter(req DungeonEnterRequest) (DungeonResult, er
 			}
 			if tag.RowsAffected() == 0 {
 				return DungeonResult{}, ErrInsufficientBalance
+			}
+		}
+		for _, item := range cost.Items {
+			if err := s.consumeBagItem(ctx, tx, req.CharacterID, item.ItemID, item.Quantity); err != nil {
+				return DungeonResult{}, fmt.Errorf("dungeon cost item %s: %w", item.ItemID, err)
 			}
 		}
 		var dungeonRunID string
@@ -871,15 +885,9 @@ func (s *PostgresStore) DungeonFinish(req DungeonFinishRequest) (DungeonResult, 
 				return DungeonResult{}, err
 			}
 		}
-		if req.Exp > 0 {
-			_, err = tx.Exec(ctx, `
-				UPDATE characters
-				SET exp = exp + $3, updated_at = NOW()
-				WHERE account_id = $1 AND id = $2
-			`, req.AccountID, req.CharacterID, req.Exp)
-			if err != nil {
-				return DungeonResult{}, err
-			}
+		levelProgress, err := s.applyCharacterExpProgress(ctx, tx, req)
+		if err != nil {
+			return DungeonResult{}, err
 		}
 		rewards, err := s.applyDungeonRewards(ctx, tx, req)
 		if err != nil {
@@ -911,6 +919,7 @@ func (s *PostgresStore) DungeonFinish(req DungeonFinishRequest) (DungeonResult, 
 			Cost:         DungeonCost{Items: []InventoryItem{}},
 			Rewards: DungeonRewards{
 				Exp:            req.Exp,
+				LevelsGained:   levelProgress.LevelsGained,
 				Level:          snapshot.Level,
 				TokenReward:    strconv.FormatInt(req.RewardPlan.TokenReward, 10),
 				Items:          rewards.Items,
@@ -920,6 +929,40 @@ func (s *PostgresStore) DungeonFinish(req DungeonFinishRequest) (DungeonResult, 
 			Snapshot:         snapshot,
 		}, nil
 	})
+}
+
+func (s *PostgresStore) applyCharacterExpProgress(ctx context.Context, tx pgx.Tx, req DungeonFinishRequest) (LevelProgress, error) {
+	var currentLevel int
+	var totalExp int64
+	var err error
+	if req.Exp > 0 {
+		err = tx.QueryRow(ctx, `
+			UPDATE characters
+			SET exp = exp + $3, updated_at = NOW()
+			WHERE account_id = $1 AND id = $2
+			RETURNING level, exp
+		`, req.AccountID, req.CharacterID, req.Exp).Scan(&currentLevel, &totalExp)
+	} else {
+		err = tx.QueryRow(ctx, `
+			SELECT level, exp
+			FROM characters
+			WHERE account_id = $1 AND id = $2
+		`, req.AccountID, req.CharacterID).Scan(&currentLevel, &totalExp)
+	}
+	if err != nil {
+		return LevelProgress{}, err
+	}
+	progress := req.LevelProgression.Progress(currentLevel, totalExp)
+	if progress.Level != currentLevel {
+		if _, err := tx.Exec(ctx, `
+			UPDATE characters
+			SET level = $3, updated_at = NOW()
+			WHERE account_id = $1 AND id = $2
+		`, req.AccountID, req.CharacterID, progress.Level); err != nil {
+			return LevelProgress{}, err
+		}
+	}
+	return progress, nil
 }
 
 func (s *PostgresStore) LootClaim(req LootActionRequest) (EconomySnapshot, error) {
@@ -1231,6 +1274,11 @@ func (s *PostgresStore) runActivitySettlement(scope string, req ActivitySettleme
 		if err := s.lockCharacter(ctx, tx, req.AccountID, req.CharacterID); err != nil {
 			return ActivitySettlementResult{}, err
 		}
+		if req.ActivityType == "gathering" {
+			if err := s.ensureGatheringNodeReady(ctx, tx, req.CharacterID, req.ActivityID, req.RespawnSeconds); err != nil {
+				return ActivitySettlementResult{}, err
+			}
+		}
 		rewards, err := s.applyRewardsToBag(ctx, tx, req.AccountID, req.CharacterID, req.OpID, req.ActivityID, req.ActivityType, req.RewardPlan)
 		if err != nil {
 			return ActivitySettlementResult{}, err
@@ -1277,6 +1325,34 @@ func (s *PostgresStore) runActivitySettlement(scope string, req ActivitySettleme
 			Snapshot:     snapshot,
 		}, nil
 	})
+}
+
+func (s *PostgresStore) ensureGatheringNodeReady(ctx context.Context, tx pgx.Tx, characterID int64, nodeID string, respawnSeconds int) error {
+	if respawnSeconds <= 0 {
+		return nil
+	}
+	nodeID = strings.TrimSpace(nodeID)
+	var lastSettledAt time.Time
+	err := tx.QueryRow(ctx, `
+		SELECT created_at
+		FROM gathering_settlements
+		WHERE character_id = $1 AND node_key = $2
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, characterID, nodeID).Scan(&lastSettledAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	readyAt := lastSettledAt.Add(time.Duration(respawnSeconds) * time.Second)
+	now := time.Now().UTC()
+	if !now.Before(readyAt) {
+		return nil
+	}
+	remaining := int((readyAt.Sub(now) + time.Second - 1) / time.Second)
+	return fmt.Errorf("gathering node %q is on cooldown for %ds", nodeID, remaining)
 }
 
 type appliedDungeonRewards struct {
@@ -1466,21 +1542,7 @@ func (s *PostgresStore) applyRewardsToBag(ctx context.Context, tx pgx.Tx, accoun
 		if err := s.ensureItemCatalog(ctx, tx, reward.ItemID, category, reward.Rarity, true); err != nil {
 			return DungeonRewards{}, err
 		}
-		targetSlot, err := s.resolveStorageSlot(ctx, tx, characterID, "BAG", -1)
-		if err != nil {
-			return DungeonRewards{}, err
-		}
-		var row InventoryItem
-		err = tx.QueryRow(ctx, `
-			INSERT INTO inventory_items (character_id, item_id, quantity, location, slot)
-			VALUES ($1, $2, $3, 'BAG', $4)
-			RETURNING id, item_id, quantity, slot
-		`, characterID, reward.ItemID, reward.Quantity, targetSlot).Scan(
-			&row.ID,
-			&row.ItemID,
-			&row.Quantity,
-			&row.Slot,
-		)
+		row, err := s.addInventoryItemToStorage(ctx, tx, characterID, "BAG", reward.ItemID, reward.Quantity)
 		if err != nil {
 			return DungeonRewards{}, err
 		}
@@ -1492,6 +1554,71 @@ func (s *PostgresStore) applyRewardsToBag(ctx context.Context, tx pgx.Tx, accoun
 		}
 	}
 	return out, nil
+}
+
+func (s *PostgresStore) addInventoryItemToStorage(ctx context.Context, tx pgx.Tx, characterID int64, location, itemID string, quantity int64) (InventoryItem, error) {
+	location = strings.TrimSpace(location)
+	itemID = strings.TrimSpace(itemID)
+	if itemID == "" {
+		return InventoryItem{}, errors.New("itemId is required")
+	}
+	if quantity <= 0 {
+		return InventoryItem{}, errors.New("quantity must be positive")
+	}
+
+	var stackable bool
+	err := tx.QueryRow(ctx, `SELECT COALESCE(stackable, TRUE) FROM item_catalog WHERE item_id = $1`, itemID).Scan(&stackable)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return InventoryItem{}, err
+	}
+	if stackable {
+		var row InventoryItem
+		err = tx.QueryRow(ctx, `
+			SELECT id, item_id, COALESCE(slot, -1)
+			FROM inventory_items
+			WHERE character_id = $1
+				AND location = $2
+				AND item_id = $3
+				AND bind_type = 'BOUND'
+			ORDER BY slot NULLS LAST, id
+			LIMIT 1
+			FOR UPDATE
+		`, characterID, location, itemID).Scan(&row.ID, &row.ItemID, &row.Slot)
+		if err == nil {
+			if _, err := tx.Exec(ctx, `
+				UPDATE inventory_items
+				SET quantity = quantity + $2, updated_at = NOW()
+				WHERE id = $1
+			`, row.ID, quantity); err != nil {
+				return InventoryItem{}, err
+			}
+			row.Quantity = quantity
+			return row, nil
+		}
+		if !errors.Is(err, pgx.ErrNoRows) {
+			return InventoryItem{}, err
+		}
+	}
+
+	targetSlot, err := s.resolveStorageSlot(ctx, tx, characterID, location, -1)
+	if err != nil {
+		return InventoryItem{}, err
+	}
+	var row InventoryItem
+	err = tx.QueryRow(ctx, `
+		INSERT INTO inventory_items (character_id, item_id, quantity, location, slot)
+		VALUES ($1, $2, $3, $4, $5)
+		RETURNING id, item_id, quantity, slot
+	`, characterID, itemID, quantity, location, targetSlot).Scan(
+		&row.ID,
+		&row.ItemID,
+		&row.Quantity,
+		&row.Slot,
+	)
+	if err != nil {
+		return InventoryItem{}, err
+	}
+	return row, nil
 }
 
 func (s *PostgresStore) resolveLootID(ctx context.Context, tx pgx.Tx, req LootActionRequest) (int64, error) {
@@ -1580,14 +1707,7 @@ func (s *PostgresStore) claimLootRow(ctx context.Context, tx pgx.Tx, req LootAct
 	if quantity <= 0 || quantity > available {
 		return ErrInsufficientBalance
 	}
-	targetSlot, err := s.resolveStorageSlot(ctx, tx, req.CharacterID, "BAG", -1)
-	if err != nil {
-		return err
-	}
-	if _, err := tx.Exec(ctx, `
-		INSERT INTO inventory_items (character_id, item_id, quantity, location, slot)
-		VALUES ($1, $2, $3, 'BAG', $4)
-	`, req.CharacterID, *itemID, quantity, targetSlot); err != nil {
+	if _, err := s.addInventoryItemToStorage(ctx, tx, req.CharacterID, "BAG", *itemID, quantity); err != nil {
 		return err
 	}
 	if quantity == available {
@@ -1663,6 +1783,8 @@ func (s *PostgresStore) economySnapshot(ctx context.Context, q postgresReader, a
 			COALESCE(w.stamina, 0),
 			c.level,
 			c.exp,
+			c.highest_cleared_chapter,
+			c.highest_cleared_floor,
 			c.bag_expand_count,
 			a.has_trading_license
 		FROM characters c
@@ -1677,6 +1799,8 @@ func (s *PostgresStore) economySnapshot(ctx context.Context, q postgresReader, a
 		&snapshot.Stamina,
 		&snapshot.Level,
 		&snapshot.Exp,
+		&snapshot.HighestClearedChapterID,
+		&snapshot.HighestClearedFloorID,
 		&snapshot.BagExpandCount,
 		&snapshot.HasLicense,
 	)

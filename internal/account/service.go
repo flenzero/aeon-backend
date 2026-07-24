@@ -177,7 +177,11 @@ func (s *Service) PlayerProfile(accountID, characterID int64) (store.PlayerState
 	if err != nil {
 		return store.PlayerState{}, store.EconomySnapshot{}, err
 	}
-	return player, s.resolveEconomySnapshot(economy), nil
+	economy = s.resolveEconomySnapshot(economy)
+	player.Level = economy.Level
+	player.Exp = economy.Exp
+	player.ExpToNextLevel = economy.ExpToNextLevel
+	return player, economy, nil
 }
 
 func (s *Service) resolveCharacterEquipment(character store.Character) store.Character {
@@ -197,6 +201,9 @@ func (s *Service) resolveEconomySnapshot(snapshot store.EconomySnapshot) store.E
 	if s.economyRules == nil || s.economyRulesErr != nil {
 		return snapshot
 	}
+	progress := s.economyRules.LevelProgress(snapshot.Level, snapshot.Exp)
+	snapshot.Level = progress.Level
+	snapshot.ExpToNextLevel = progress.ExpToNextLevel
 	for index := range snapshot.Equipment {
 		resolved, err := s.economyRules.ResolveEquipmentItem(snapshot.Equipment[index])
 		if err == nil {

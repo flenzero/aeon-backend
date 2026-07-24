@@ -28,7 +28,7 @@ func TestAdminCatalogExpandsTemplateEquipmentRarities(t *testing.T) {
 	}
 
 	for _, item := range listed.Items {
-		if item.ItemID == "aeonblight_sword_t30" && item.RarityLabel == "至臻" && item.SeriesID == "sword" && item.Stage == 30 {
+		if item.ItemID == "aeonblight_sword_t30" && item.RarityLabel == "至臻" && item.SeriesID == "sword" && item.Stage == 30 && item.SellPrice == 7850 {
 			return
 		}
 	}

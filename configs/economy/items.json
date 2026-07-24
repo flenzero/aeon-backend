@@ -55,35 +55,6 @@
       "grantLockedAeb": 30
     },
     {
-      "itemId": "rusted_saber",
-      "displayName": "锈蚀军刀",
-      "category": "weapon",
-      "rarity": 1,
-      "maxStack": 1,
-      "isEquipment": true,
-      "equipSlot": 0,
-      "weaponType": 1,
-      "weaponTypeKey": "sword",
-      "tradable": true,
-      "defaultBindType": "UNBOUND",
-      "buyPrice": 300,
-      "sellPrice": 80
-    },
-    {
-      "itemId": "nightglass_staff",
-      "displayName": "夜璃法杖",
-      "category": "weapon",
-      "rarity": 3,
-      "maxStack": 1,
-      "isEquipment": true,
-      "equipSlot": 0,
-      "weaponType": 4,
-      "weaponTypeKey": "staff",
-      "tradable": true,
-      "defaultBindType": "UNBOUND",
-      "sellPrice": 160
-    },
-    {
       "itemId": "emberroot_seed",
       "displayName": "烬根种子",
       "category": "seed",
@@ -285,6 +256,50 @@
       "tradable": true,
       "defaultBindType": "UNBOUND",
       "sellPrice": 150
+    },
+    {
+      "itemId": "gloomfin_sweet",
+      "displayName": "清甜幽鳍鱼",
+      "category": "fish",
+      "rarity": 1,
+      "maxStack": 999,
+      "isEquipment": false,
+      "tradable": true,
+      "defaultBindType": "UNBOUND",
+      "sellPrice": 6
+    },
+    {
+      "itemId": "gloomfin_fresh",
+      "displayName": "鲜嫩幽鳍鱼",
+      "category": "fish",
+      "rarity": 2,
+      "maxStack": 999,
+      "isEquipment": false,
+      "tradable": true,
+      "defaultBindType": "UNBOUND",
+      "sellPrice": 18
+    },
+    {
+      "itemId": "gloomfin_silver",
+      "displayName": "银纹幽鳍鱼",
+      "category": "fish",
+      "rarity": 3,
+      "maxStack": 999,
+      "isEquipment": false,
+      "tradable": true,
+      "defaultBindType": "UNBOUND",
+      "sellPrice": 110
+    },
+    {
+      "itemId": "gloomfin_moonspotted",
+      "displayName": "月斑幽鳍鱼",
+      "category": "fish",
+      "rarity": 4,
+      "maxStack": 999,
+      "isEquipment": false,
+      "tradable": true,
+      "defaultBindType": "UNBOUND",
+      "sellPrice": 155
     },
     {
       "itemId": "boss_ticket_ashen_threshold",

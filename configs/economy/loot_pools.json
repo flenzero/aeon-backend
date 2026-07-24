@@ -1172,6 +1172,18 @@
       ]
     },
     {
+      "lootPoolId": "gather_shadow_woods_blackwater_fishing",
+      "entries": [
+        {"rewardType":"item","itemId":"gloomfin_sweet","quantityMin":1,"quantityMax":2,"dropChance":0.7},
+        {"rewardType":"item","itemId":"gloomfin_fresh","quantityMin":1,"quantityMax":1,"dropChance":0.18},
+        {"rewardType":"item","itemId":"gloomfin_silver","quantityMin":1,"quantityMax":1,"dropChance":0.04},
+        {"rewardType":"item","itemId":"gloomfin_moonspotted","quantityMin":1,"quantityMax":1,"dropChance":0.004},
+        {"rewardType":"equipment","quantityMin":1,"quantityMax":1,"dropChance":0.03,"rarity":1,"equipmentStageMode":"character_level_floor","equipmentSeries":["sword","axe","bow","staff","helmet","chest","gloves","shoes","cloak","accessory"]},
+        {"rewardType":"equipment","quantityMin":1,"quantityMax":1,"dropChance":0.015,"rarity":2,"equipmentStageMode":"character_level_floor","equipmentSeries":["sword","axe","bow","staff","helmet","chest","gloves","shoes","cloak","accessory"]},
+        {"rewardType":"item","itemId":"aeb_exchange_voucher","quantityMin":1,"quantityMax":1,"dropChance":0.0001}
+      ]
+    },
+    {
       "lootPoolId": "farm_emberroot_harvest",
       "entries": [
         {

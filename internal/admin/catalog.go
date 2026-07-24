@@ -35,6 +35,7 @@ type adminCatalogItem struct {
 	Stage                int     `json:"stage,omitempty"`
 	DisplayType          string  `json:"displayType,omitempty"`
 	Stackable            bool    `json:"stackable"`
+	SellPrice            int64   `json:"sellPrice"`
 	MaxGrantQuantity     int64   `json:"maxGrantQuantity"`
 	EnabledForAdminGrant bool    `json:"enabledForAdminGrant"`
 }
@@ -69,6 +70,7 @@ var adminCatalogCategories = []adminCatalogCategory{
 	{Key: "aeb_voucher", Label: "AEB 凭证"},
 	{Key: "seed", Label: "种子"},
 	{Key: "crop", Label: "作物"},
+	{Key: "fish", Label: "鱼获"},
 	{Key: "boss_ticket", Label: "Boss 门票"},
 	{Key: "bounty_badge", Label: "悬赏徽章"},
 	{Key: "enhancement_stone", Label: "强化石"},
@@ -240,6 +242,7 @@ func (h *Handler) catalogItems() []adminCatalogItem {
 			RarityLabel:          rarityLabel(h.rules, item.Rarity, item.IsEquipment),
 			IsEquipment:          item.IsEquipment,
 			Stackable:            stackable,
+			SellPrice:            item.SellPrice,
 			MaxGrantQuantity:     maxGrantQuantity,
 			EnabledForAdminGrant: true,
 		}
@@ -272,6 +275,9 @@ func (h *Handler) catalogItems() []adminCatalogItem {
 					variant := row
 					variant.Rarity = rarity
 					variant.RarityLabel = rarityLabel(h.rules, rarity, true)
+					if sellPrice, ok := h.rules.EquipmentSellPriceGold(item.ItemID, rarity); ok {
+						variant.SellPrice = sellPrice
+					}
 					items = append(items, variant)
 				}
 				continue
